@@ -28,7 +28,7 @@ def make_readme(dict_):
             text += "Version | Date | Changes | Notes\n"
             text += "--- | --- | --- | ---\n"
             for f in firmwares:
-                dl_url = f["url"] + '?download_name=' + f["filename"]
+                dl_url = f["url"].replace("%2F", '/') + '?download_name=' + f["filename"]
                 version = md_link(f["version"], dl_url)
                 date = datetime.fromtimestamp(f["displayTime"] / 1000).date()
                 date_str = str(date).replace('-', chr(0x2011))
