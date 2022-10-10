@@ -1,1 +1,6 @@
 aiohttp
+lxml
+pakler
+PySquashfsImage
+python-dateutil
+waybackpy
