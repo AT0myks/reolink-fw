@@ -69,9 +69,9 @@ def get_info_from_files(files):
 
 
 def get_files_from_squashfs(binbytes):
+    files = dict.fromkeys(FILES)
     image = SquashFsImage()
     image.setFile(io.BytesIO(binbytes))
-    files = dict.fromkeys(FILES)
     for f in image.root.findAll():
         name = Path(f.getPath()).name
         if name in files:
@@ -81,20 +81,19 @@ def get_files_from_squashfs(binbytes):
 
 
 def get_files_from_ubi(binbytes):
-    with TempFile(binbytes) as t:
-        start_offset = 0
-        block_size = guess_peb_size(t)
-        ubi_obj = ubi(ubi_file(t, block_size, start_offset, None))
-
-    vol_blocks = ubi_obj.images[0].volumes["app"].get_blocks(ubi_obj.blocks)
-    ubifs_obj = ubifs(leb_virtual_file(ubi_obj, vol_blocks))
-    inodes = {}
-    bad_blocks = []
-    walk.index(ubifs_obj, ubifs_obj.master_node.root_lnum, ubifs_obj.master_node.root_offs, inodes, bad_blocks)
     files = dict.fromkeys(FILES)
-    for dent in inodes[1]['dent']:
-        if dent.name in files:
-            files[dent.name] = _process_reg_file(ubifs_obj, inodes[dent.inum], None)
+    with TempFile(binbytes) as t:
+        block_size = guess_peb_size(t)
+        ubi_obj = ubi(ubi_file(t, block_size))
+        vol_blocks = ubi_obj.images[0].volumes["app"].get_blocks(ubi_obj.blocks)
+        ubifs_obj = ubifs(leb_virtual_file(ubi_obj, vol_blocks))
+        inodes = {}
+        bad_blocks = []
+        walk.index(ubifs_obj, ubifs_obj.master_node.root_lnum, ubifs_obj.master_node.root_offs, inodes, bad_blocks)
+        for dent in inodes[1]['dent']:
+            if dent.name in files:
+                files[dent.name] = _process_reg_file(ubifs_obj, inodes[dent.inum], None)
+        ubi_obj._file._fhandle.close()
     return files
 
 
