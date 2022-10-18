@@ -125,7 +125,7 @@ def is_cramfs(bytes_):
 
 
 def is_url(string):
-    return string.startswith("http")
+    return str(string).startswith("http")
 
 
 def is_local_file(string):
