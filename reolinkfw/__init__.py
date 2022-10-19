@@ -22,9 +22,13 @@ from .tmpfile import TempFile
 FILES = ("version_file", "version.json", "dvr.xml", "dvr", "router")
 INFO_KEYS = ("firmware_version_prefix", "board_type", "board_name", "build_date", "display_type_info", "detail_machine_type", "type")
 
+SQUASHFS_MAGIC = b"hsqs"
+CRAMFS_MAGIC = b'E=\xcd('
+PAK_MAGIC = b"\x13Yr2"
 
-async def download_zip(url):
-    """Return ZIP file as bytes.
+
+async def download(url):
+    """Return resource as bytes.
     
     Return the status code of the request if it is not 200.
     """
@@ -116,11 +120,11 @@ def is_ubi(bytes_):
 
 
 def is_squashfs(bytes_):
-    return bytes_[:4] == b"hsqs"
+    return bytes_[:4] == SQUASHFS_MAGIC
 
 
 def is_cramfs(bytes_):
-    return bytes_[:4] == b'E=\xcd('
+    return bytes_[:4] == CRAMFS_MAGIC
 
 
 def is_url(string):
@@ -131,10 +135,12 @@ def is_local_file(string):
     return Path(string).is_file()
 
 
-def is_pak(filename):
+def is_pak(file):
+    if isinstance(file, bytes):
+        return file[:4] == PAK_MAGIC
     try:
-        with open(filename, "rb") as f:
-            return f.read(4) == b"\x13Yr2"
+        with open(file, "rb") as f:
+            return f.read(4) == PAK_MAGIC
     except OSError:
         return False
 
@@ -142,18 +148,21 @@ def is_pak(filename):
 async def get_info(file_or_url):
     """Retreive firmware info from an on-disk file or a URL.
     
-    The file may be a ZIP or a PAK.
+    The file or resource may be a ZIP or a PAK.
     """
     if is_url(file_or_url):
         type_ = "url"
-        zipbytes = await download_zip(file_or_url)
-        if isinstance(zipbytes, int):
-            return {type_: file_or_url, "error": zipbytes}
-        with io.BytesIO(zipbytes) as f:
-            if is_zipfile(f):
-                pakbytes = extract_pak(f)
-            else:
-                return {type_: file_or_url, "error": "Not a ZIP file"}
+        zip_or_pak_bytes = await download(file_or_url)
+        if isinstance(zip_or_pak_bytes, int):
+            return {type_: file_or_url, "error": zip_or_pak_bytes}
+        elif is_pak(zip_or_pak_bytes):
+            pakbytes = zip_or_pak_bytes
+        else:
+            with io.BytesIO(zip_or_pak_bytes) as f:
+                if is_zipfile(f):
+                    pakbytes = extract_pak(f)
+                else:
+                    return {type_: file_or_url, "error": "Not a ZIP or a PAK file"}
     elif is_local_file(file_or_url):
         type_ = "file"
         if is_zipfile(file_or_url):
@@ -162,7 +171,7 @@ async def get_info(file_or_url):
             with open(file_or_url, "rb") as f:
                 pakbytes = f.read()
         else:
-            return {type_: file_or_url, "error": "Not a ZIP or a PAK"}
+            return {type_: file_or_url, "error": "Not a ZIP or a PAK file"}
     else:
         return {"arg": file_or_url, "error": "Not a URL or file"}
     if pakbytes is None:
