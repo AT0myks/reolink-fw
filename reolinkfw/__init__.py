@@ -54,10 +54,13 @@ def extract_fs(pakbytes):
 
 def extract_paks(zip):
     """Return a list of PAK files found in the ZIP."""
+    paks = []
     with ZipFile(zip) as myzip:
-        files = myzip.namelist()
-        paks = [f for f in files if any(s in Path(f).suffix for s in (".pak", ".IPC"))]
-        return [myzip.read(pak) for pak in paks]
+        for name in myzip.namelist():
+            with myzip.open(name) as file:
+                if is_pak(file):
+                    paks.append(myzip.read(name))
+    return paks
 
 
 def get_info_from_files(files):
@@ -134,12 +137,18 @@ def is_local_file(string):
     return Path(string).is_file()
 
 
+def _is_pak(file):
+    return file.read(4) == PAK_MAGIC
+
+
 def is_pak(file):
     if isinstance(file, bytes):
-        return file[:4] == PAK_MAGIC
+        return _is_pak(io.BytesIO(file))
+    elif hasattr(file, "read"):
+        return _is_pak(file)
     try:
         with open(file, "rb") as f:
-            return f.read(4) == PAK_MAGIC
+            return _is_pak(f)
     except OSError:
         return False
 
