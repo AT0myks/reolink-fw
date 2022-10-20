@@ -52,13 +52,12 @@ def extract_fs(pakbytes):
         return "No section found"
 
 
-def extract_pak(zip):
-    """Return the PAK file as bytes if found in the ZIP, else None."""
+def extract_paks(zip):
+    """Return a list of PAK files found in the ZIP."""
     with ZipFile(zip) as myzip:
-        pak = [f for f in myzip.namelist() if any(s in Path(f).suffix for s in (".pak", ".IPC"))]
-        if not pak:
-            return None
-        return myzip.read(pak[0])
+        files = myzip.namelist()
+        paks = [f for f in files if any(s in Path(f).suffix for s in (".pak", ".IPC"))]
+        return [myzip.read(pak) for pak in paks]
 
 
 def get_info_from_files(files):
@@ -145,6 +144,22 @@ def is_pak(file):
         return False
 
 
+async def get_info_from_pak(pakbytes):
+    binbytes = await asyncio.to_thread(extract_fs, pakbytes)
+    if isinstance(binbytes, str):
+        return {"error": binbytes}
+    if is_cramfs(binbytes):
+        func = get_files_from_cramfs
+    elif is_ubi(binbytes):
+        func = get_files_from_ubi
+    elif is_squashfs(binbytes):
+        func = get_files_from_squashfs
+    else:
+        return {"error": "Unrecognized image type"}
+    files = await asyncio.to_thread(func, binbytes)
+    return await asyncio.to_thread(get_info_from_files, files)
+
+
 async def get_info(file_or_url):
     """Retreive firmware info from an on-disk file or a URL.
     
@@ -154,39 +169,26 @@ async def get_info(file_or_url):
         type_ = "url"
         zip_or_pak_bytes = await download(file_or_url)
         if isinstance(zip_or_pak_bytes, int):
-            return {type_: file_or_url, "error": zip_or_pak_bytes}
+            return [{type_: file_or_url, "error": zip_or_pak_bytes}]
         elif is_pak(zip_or_pak_bytes):
-            pakbytes = zip_or_pak_bytes
+            paks = [zip_or_pak_bytes]
         else:
             with io.BytesIO(zip_or_pak_bytes) as f:
                 if is_zipfile(f):
-                    pakbytes = extract_pak(f)
+                    paks = extract_paks(f)
                 else:
-                    return {type_: file_or_url, "error": "Not a ZIP or a PAK file"}
+                    return [{type_: file_or_url, "error": "Not a ZIP or a PAK file"}]
     elif is_local_file(file_or_url):
         type_ = "file"
         if is_zipfile(file_or_url):
-            pakbytes = extract_pak(file_or_url)
+            paks = extract_paks(file_or_url)
         elif is_pak(file_or_url):
             with open(file_or_url, "rb") as f:
-                pakbytes = f.read()
+                paks = [f.read()]
         else:
-            return {type_: file_or_url, "error": "Not a ZIP or a PAK file"}
+            return [{type_: file_or_url, "error": "Not a ZIP or a PAK file"}]
     else:
-        return {"arg": file_or_url, "error": "Not a URL or file"}
-    if pakbytes is None:
-        return {type_: file_or_url, "error": "PAK not found in ZIP file"}
-    binbytes = await asyncio.to_thread(extract_fs, pakbytes)
-    if isinstance(binbytes, str):
-        return {type_: file_or_url, "error": binbytes}
-    if is_cramfs(binbytes):
-        func = get_files_from_cramfs
-    elif is_ubi(binbytes):
-        func = get_files_from_ubi
-    elif is_squashfs(binbytes):
-        func = get_files_from_squashfs
-    else:
-        return {type_: file_or_url, "error": "Unrecognized image type"}
-    files = await asyncio.to_thread(func, binbytes)
-    info = await asyncio.to_thread(get_info_from_files, files)
-    return {**info, type_: file_or_url}
+        return [{"arg": file_or_url, "error": "Not a URL or file"}]
+    if not paks:
+        return [{type_: file_or_url, "error": "no PAKs found in ZIP file"}]
+    return [{**await get_info_from_pak(pak), type_: file_or_url} for pak in paks]
