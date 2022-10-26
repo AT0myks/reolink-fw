@@ -53,14 +53,14 @@ def extract_fs(pakbytes):
 
 
 def extract_paks(zip):
-    """Return a list of PAK files found in the ZIP."""
-    paks = []
+    """Return a list of unique PAK files found in the ZIP."""
+    paks = set()
     with ZipFile(zip) as myzip:
         for name in myzip.namelist():
             with myzip.open(name) as file:
                 if is_pak(file):
-                    paks.append(myzip.read(name))
-    return paks
+                    paks.add(myzip.read(name))
+    return sorted(paks)  # Always return in the same order.
 
 
 def get_info_from_files(files):
