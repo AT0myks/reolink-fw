@@ -1,4 +1,5 @@
 import asyncio
+import hashlib
 import io
 import re
 import zlib
@@ -153,10 +154,15 @@ def is_pak(file):
         return False
 
 
+def sha256(bytes_):
+    return hashlib.sha256(bytes_).hexdigest()
+
+
 async def get_info_from_pak(pakbytes):
+    ha = sha256(pakbytes)
     binbytes = await asyncio.to_thread(extract_fs, pakbytes)
     if isinstance(binbytes, str):
-        return {"error": binbytes}
+        return {"error": binbytes, "sha256": ha}
     if is_cramfs(binbytes):
         func = get_files_from_cramfs
     elif is_ubi(binbytes):
@@ -164,9 +170,10 @@ async def get_info_from_pak(pakbytes):
     elif is_squashfs(binbytes):
         func = get_files_from_squashfs
     else:
-        return {"error": "Unrecognized image type"}
+        return {"error": "Unrecognized image type", "sha256": ha}
     files = await asyncio.to_thread(func, binbytes)
-    return await asyncio.to_thread(get_info_from_files, files)
+    info = await asyncio.to_thread(get_info_from_files, files)
+    return {**info, "sha256": ha}
 
 
 async def get_info(file_or_url):
