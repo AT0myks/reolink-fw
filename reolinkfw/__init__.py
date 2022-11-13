@@ -8,6 +8,7 @@ from zipfile import ZipFile, is_zipfile
 
 import aiohttp
 from lxml.etree import fromstring
+from lxml.html import document_fromstring
 from PySquashfsImage import SquashFsImage
 from ubireader.ubi import ubi
 from ubireader.ubi.defines import UBI_EC_HDR_MAGIC
@@ -176,6 +177,19 @@ async def get_info_from_pak(pakbytes):
     return {**info, "sha256": ha}
 
 
+async def direct_download_url(url):
+    if url.startswith("https://drive.google.com/file/d/"):
+        return f"https://drive.google.com/uc?id={url.split('/')[5]}&confirm=t"
+    elif url.startswith("https://www.mediafire.com/file/"):
+        doc = document_fromstring(await download(url))
+        return doc.get_element_by_id("downloadButton").get("href")
+    elif url.startswith("https://bit.ly/"):
+        async with aiohttp.ClientSession() as session:
+            async with session.get(url, allow_redirects=False) as resp:
+                return await direct_download_url(resp.headers["Location"])
+    return url
+
+
 async def get_info(file_or_url):
     """Retreive firmware info from an on-disk file or a URL.
     
@@ -183,9 +197,10 @@ async def get_info(file_or_url):
     """
     if is_url(file_or_url):
         type_ = "url"
-        zip_or_pak_bytes = await download(file_or_url)
+        url = await direct_download_url(file_or_url)
+        zip_or_pak_bytes = await download(url)
         if isinstance(zip_or_pak_bytes, int):
-            return [{type_: file_or_url, "error": zip_or_pak_bytes}]
+            return [{type_: url, "error": zip_or_pak_bytes}]
         elif is_pak(zip_or_pak_bytes):
             paks = [zip_or_pak_bytes]
         else:
@@ -193,7 +208,7 @@ async def get_info(file_or_url):
                 if is_zipfile(f):
                     paks = extract_paks(f)
                 else:
-                    return [{type_: file_or_url, "error": "Not a ZIP or a PAK file"}]
+                    return [{type_: url, "error": "Not a ZIP or a PAK file"}]
     elif is_local_file(file_or_url):
         type_ = "file"
         if is_zipfile(file_or_url):
