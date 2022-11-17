@@ -1,0 +1,47 @@
+[build-system]
+requires = ["setuptools>=64.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "reolinkfw"
+description = "Extract information from Reolink firmware files."
+readme = "README.md"
+requires-python = ">=3.9"
+license = {file = "LICENSE"}
+keywords = ["reolink", "firmware"]
+authors = [
+  {name = "AT0myks", email = "at0myks.dev@gmail.com"},
+]
+classifiers = [
+    "Development Status :: 5 - Production/Stable",
+    "Intended Audience :: Developers",
+    "Intended Audience :: End Users/Desktop",
+    "License :: OSI Approved :: GNU General Public License v3 (GPLv3)",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Operating System :: OS Independent",
+    "Topic :: Utilities"
+]
+dependencies = [
+    "aiohttp",
+    "kaitaistruct",
+    "lxml",
+    "pakler",
+    "PySquashfsImage",
+    "python-lzo",
+    "ubi-reader"
+]
+dynamic = ["version"]
+
+[project.urls]
+Issues = "https://github.com/AT0myks/reolink-fw/issues"
+Source = "https://github.com/AT0myks/reolink-fw"
+
+[project.scripts]
+reolinkfw = "reolinkfw.__main__:main"
+
+[tool.setuptools.dynamic]
+version = {attr = "reolinkfw.__version__"}
