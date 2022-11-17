@@ -21,6 +21,8 @@ from . import mypakler
 from .cramfs import Cramfs
 from .tmpfile import TempFile
 
+__version__ = "1.0.0"
+
 FILES = ("version_file", "version.json", "dvr.xml", "dvr", "router")
 INFO_KEYS = ("firmware_version_prefix", "board_type", "board_name", "build_date", "display_type_info", "detail_machine_type", "type")
 
@@ -106,6 +108,9 @@ def get_files_from_ubi(binbytes):
 
 
 def get_files_from_cramfs(binbytes):
+    # kaitai_compress exists https://github.com/kaitai-io/kaitai_compress#in-python
+    # but requires manual install. It's simpler for the end user to do the
+    # decompression here.
     files = dict.fromkeys(FILES)
     for child in Cramfs.from_bytes(binbytes).super_block.root.as_dir.children:
         if child.type == Cramfs.Inode.FileType.reg_file:
