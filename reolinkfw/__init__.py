@@ -21,7 +21,7 @@ from . import mypakler
 from .cramfs import Cramfs
 from .tmpfile import TempFile
 
-__version__ = "1.0.0"
+__version__ = "1.0.1"
 
 FILES = ("version_file", "version.json", "dvr.xml", "dvr", "router")
 INFO_KEYS = ("firmware_version_prefix", "board_type", "board_name", "build_date", "display_type_info", "detail_machine_type", "type")
@@ -196,16 +196,16 @@ async def direct_download_url(url):
 
 
 async def get_info(file_or_url):
-    """Retreive firmware info from an on-disk file or a URL.
+    """Retrieve firmware info from an on-disk file or a URL.
     
     The file or resource may be a ZIP or a PAK.
     """
     if is_url(file_or_url):
         type_ = "url"
-        url = await direct_download_url(file_or_url)
-        zip_or_pak_bytes = await download(url)
+        file_or_url = await direct_download_url(file_or_url)
+        zip_or_pak_bytes = await download(file_or_url)
         if isinstance(zip_or_pak_bytes, int):
-            return [{type_: url, "error": zip_or_pak_bytes}]
+            return [{type_: file_or_url, "error": zip_or_pak_bytes}]
         elif is_pak(zip_or_pak_bytes):
             paks = [zip_or_pak_bytes]
         else:
@@ -213,7 +213,7 @@ async def get_info(file_or_url):
                 if is_zipfile(f):
                     paks = extract_paks(f)
                 else:
-                    return [{type_: url, "error": "Not a ZIP or a PAK file"}]
+                    return [{type_: file_or_url, "error": "Not a ZIP or a PAK file"}]
     elif is_local_file(file_or_url):
         type_ = "file"
         if is_zipfile(file_or_url):
