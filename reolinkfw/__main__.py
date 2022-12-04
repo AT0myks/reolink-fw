@@ -15,7 +15,7 @@ def info(args):
 def main():
     parser = argparse.ArgumentParser(description="Extract information from Reolink firmware files")
     parser.add_argument("-V", "--version", action="version", version=f"%(prog)s {__version__}", help="print version")
-    subparsers = parser.add_subparsers()
+    subparsers = parser.add_subparsers(required=True)
     parser_i = subparsers.add_parser("info")
     parser_i.add_argument("file_or_url", help="URL or on-disk file")
     parser_i.add_argument("-i", "--indent", type=int, help="indent level for pretty print")
