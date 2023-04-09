@@ -47,7 +47,7 @@ def extract_fs(pakbytes):
     if not section_count:
         return "Could not guess section count"
     header = mypakler.read_header(pakbytes, section_count)
-    sections = {s.name: s for s in header.sections if s.name in ("fs", "app")}
+    sections = {s.name: s for s in header.sections if s.name in ("fs", "app", "rootfs")}
     if len(sections) == 2:
         return mypakler.extract_section(pakbytes, sections["app"])
     elif len(sections) == 1:
