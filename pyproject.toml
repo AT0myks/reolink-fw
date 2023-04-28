@@ -29,7 +29,7 @@ dependencies = [
     "lxml",
     "pakler",
     "pycramfs == 1.0.0",
-    "PySquashfsImage",
+    "PySquashfsImage == 0.8.0",
     "python-lzo",
     "ubi-reader"
 ]
