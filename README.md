@@ -110,7 +110,7 @@ will give something like this:
 ## Notes
 
 There are at least 3 types of file systems used for Reolink firmwares:
-- [cramfs](https://www.kernel.org/doc/html/latest/filesystems/cramfs.html) (handled by [Kaitai Struct](https://formats.kaitai.io/cramfs/python.html))
+- [cramfs](https://www.kernel.org/doc/html/latest/filesystems/cramfs.html) (handled by [pycramfs](https://github.com/AT0myks/pycramfs))
 - [squashfs](https://www.kernel.org/doc/html/latest/filesystems/squashfs.html) (handled by [PySquashfsImage](https://github.com/matteomattei/PySquashfsImage))
 - [UBIFS](https://www.kernel.org/doc/html/latest/filesystems/ubifs.html) (handled by [ubi_reader](https://github.com/jrspruitt/ubi_reader))
 

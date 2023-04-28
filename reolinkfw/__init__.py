@@ -2,13 +2,13 @@ import asyncio
 import hashlib
 import io
 import re
-import zlib
 from pathlib import Path
 from zipfile import ZipFile, is_zipfile
 
 import aiohttp
 from lxml.etree import fromstring
 from lxml.html import document_fromstring
+from pycramfs import Cramfs
 from PySquashfsImage import SquashFsImage
 from ubireader.ubi import ubi
 from ubireader.ubi.defines import UBI_EC_HDR_MAGIC
@@ -18,7 +18,6 @@ from ubireader.ubifs.output import _process_reg_file
 from ubireader.utils import guess_peb_size
 
 from . import mypakler
-from .cramfs import Cramfs
 from .tmpfile import TempFile
 
 __version__ = "1.0.1"
@@ -33,7 +32,7 @@ PAK_MAGIC = b"\x13Yr2"
 
 async def download(url):
     """Return resource as bytes.
-    
+
     Return the status code of the request if it is not 200.
     """
     async with aiohttp.ClientSession() as session:
@@ -108,19 +107,11 @@ def get_files_from_ubi(binbytes):
 
 
 def get_files_from_cramfs(binbytes):
-    # kaitai_compress exists https://github.com/kaitai-io/kaitai_compress#in-python
-    # but requires manual install. It's simpler for the end user to do the
-    # decompression here.
     files = dict.fromkeys(FILES)
-    for child in Cramfs.from_bytes(binbytes).super_block.root.as_dir.children:
-        if child.type == Cramfs.Inode.FileType.reg_file:
-            name = child.name.strip('\x00')
-            if name in files:
-                file = child.as_reg_file
-                content = b''
-                for block in file.raw_blocks:
-                    content += zlib.decompress(block)
-                files[name] = content
+    with Cramfs.from_bytes(binbytes) as cramfs:
+        for name in files:
+            if (file := cramfs.find(name)) is not None:
+                files[name] = file.read_bytes()
     return files
 
 
@@ -197,7 +188,7 @@ async def direct_download_url(url):
 
 async def get_info(file_or_url):
     """Retrieve firmware info from an on-disk file or a URL.
-    
+
     The file or resource may be a ZIP or a PAK.
     """
     if is_url(file_or_url):

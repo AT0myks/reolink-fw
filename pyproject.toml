@@ -26,9 +26,9 @@ classifiers = [
 ]
 dependencies = [
     "aiohttp",
-    "kaitaistruct",
     "lxml",
     "pakler",
+    "pycramfs == 1.0.0",
     "PySquashfsImage",
     "python-lzo",
     "ubi-reader"
