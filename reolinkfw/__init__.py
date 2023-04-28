@@ -20,7 +20,7 @@ from ubireader.utils import guess_peb_size
 from . import mypakler
 from .tmpfile import TempFile
 
-__version__ = "1.0.1"
+__version__ = "1.1.0"
 
 FILES = ("version_file", "version.json", "dvr.xml", "dvr", "router")
 INFO_KEYS = ("firmware_version_prefix", "board_type", "board_name", "build_date", "display_type_info", "detail_machine_type", "type")
@@ -41,7 +41,7 @@ async def download(url):
 
 
 def extract_fs(pakbytes):
-    """Return the fs.bin or app.bin file as bytes."""
+    """Return the fs.bin, app.bin or rootfs.bin file as bytes."""
     section_count = mypakler.guess_section_count(pakbytes)
     if not section_count:
         return "Could not guess section count"
