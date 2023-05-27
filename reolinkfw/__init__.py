@@ -169,7 +169,7 @@ async def get_info_from_pak(pakbytes):
     else:
         return {"error": "Unrecognized image type", "sha256": ha}
     files = await asyncio.to_thread(func, binbytes)
-    info = await asyncio.to_thread(get_info_from_files, files)
+    info = get_info_from_files(files)
     return {**info, "sha256": ha}
 
 
@@ -202,13 +202,13 @@ async def get_info(file_or_url):
         else:
             with io.BytesIO(zip_or_pak_bytes) as f:
                 if is_zipfile(f):
-                    paks = extract_paks(f)
+                    paks = await asyncio.to_thread(extract_paks, f)
                 else:
                     return [{type_: file_or_url, "error": "Not a ZIP or a PAK file"}]
     elif is_local_file(file_or_url):
         type_ = "file"
         if is_zipfile(file_or_url):
-            paks = extract_paks(file_or_url)
+            paks = await asyncio.to_thread(extract_paks, file_or_url)
         elif is_pak(file_or_url):
             with open(file_or_url, "rb") as f:
                 paks = [f.read()]
