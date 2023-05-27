@@ -9,7 +9,7 @@ from reolinkfw import get_info, __version__
 
 def info(args):
     info = asyncio.run(get_info(args.file_or_url))
-    print(json.dumps(info, indent=args.indent))
+    print(json.dumps(info, indent=args.indent, default=str))
 
 
 def main():

@@ -3,6 +3,7 @@ import hashlib
 import io
 import re
 from pathlib import Path, PurePosixPath
+from urllib.parse import parse_qsl, urlparse
 from zipfile import ZipFile, is_zipfile
 
 import aiohttp
@@ -55,15 +56,15 @@ def extract_fs(pakbytes):
         return "No section found"
 
 
-def extract_paks(zip):
-    """Return a list of unique PAK files found in the ZIP."""
-    paks = set()
+def extract_paks(zip) -> list[tuple[str, bytes]]:
+    """Return a list of tuples, one for each PAK file found in the ZIP."""
+    paks = []
     with ZipFile(zip) as myzip:
         for name in myzip.namelist():
             with myzip.open(name) as file:
                 if is_pak(file):
-                    paks.add(myzip.read(name))
-    return sorted(paks)  # Always return in the same order.
+                    paks.append((file.name, myzip.read(name)))
+    return paks
 
 
 def get_info_from_files(files):
@@ -192,30 +193,30 @@ async def get_info(file_or_url):
     The file or resource may be a ZIP or a PAK.
     """
     if is_url(file_or_url):
-        type_ = "url"
         file_or_url = await direct_download_url(file_or_url)
         zip_or_pak_bytes = await download(file_or_url)
         if isinstance(zip_or_pak_bytes, int):
-            return [{type_: file_or_url, "error": zip_or_pak_bytes}]
+            return [{"file": file_or_url, "error": zip_or_pak_bytes}]
         elif is_pak(zip_or_pak_bytes):
-            paks = [zip_or_pak_bytes]
+            pakname = dict(parse_qsl(urlparse(file_or_url).query)).get("name")
+            paks = [(pakname, zip_or_pak_bytes)]
         else:
             with io.BytesIO(zip_or_pak_bytes) as f:
                 if is_zipfile(f):
                     paks = await asyncio.to_thread(extract_paks, f)
                 else:
-                    return [{type_: file_or_url, "error": "Not a ZIP or a PAK file"}]
+                    return [{"file": file_or_url, "error": "Not a ZIP or a PAK file"}]
     elif is_local_file(file_or_url):
-        type_ = "file"
+        file_or_url = Path(file_or_url)
         if is_zipfile(file_or_url):
             paks = await asyncio.to_thread(extract_paks, file_or_url)
         elif is_pak(file_or_url):
             with open(file_or_url, "rb") as f:
-                paks = [f.read()]
+                paks = [(file_or_url.name, f.read())]
         else:
-            return [{type_: file_or_url, "error": "Not a ZIP or a PAK file"}]
+            return [{"file": file_or_url, "error": "Not a ZIP or a PAK file"}]
     else:
         return [{"arg": file_or_url, "error": "Not a URL or file"}]
     if not paks:
-        return [{type_: file_or_url, "error": "no PAKs found in ZIP file"}]
-    return [{**await get_info_from_pak(pak), type_: file_or_url} for pak in paks]
+        return [{"file": file_or_url, "error": "no PAKs found in ZIP file"}]
+    return [{**await get_info_from_pak(pakbytes), "file": file_or_url, "pak": pakname} for pakname, pakbytes in paks]

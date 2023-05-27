@@ -11,7 +11,6 @@
 * [Requirements](#requirements)
 * [Installation](#installation)
 * [Usage](#usage)
-* [Example](#example)
 * [Notes](#notes)
 * [Issues](#issues)
 
@@ -59,8 +58,35 @@ pip install reolinkfw
 ### Command line
 
 ```
-reolinkfw info file_or_url
+$ reolinkfw info file_or_url
 ```
+
+Example:
+
+```
+$ reolinkfw info RLC-410-5MP_20_20052300.zip -i 2
+[
+  {
+    "firmware_version_prefix": "v3.0.0",
+    "board_type": "IPC_51516M5M",
+    "board_name": "IPC_51516M5M",
+    "build_date": "200523",
+    "display_type_info": "RLC-410-5MP",
+    "detail_machine_type": "IPC_51516M5M",
+    "type": "IPC",
+    "version_file": "20_20052300",
+    "sha256": "6ef371a51b61d7b21d8f7016d90b5fc1ed3eaa8a3f30f1e202a3474bfb4807e5",
+    "file": "RLC-410-5MP_20_20052300.zip",
+    "pak": "IPC_51516M5M.20_20052300.RLC-410-5MP.OV05A10.5MP.REOLINK.pak"
+  }
+]
+```
+
+`file` is the given argument, a file or URL. The value of `pak` depends on the
+argument. If it's a local or remote ZIP file it will be the path of the PAK file
+inside it. If it's a remote PAK file, it will be the value of the `name` query
+parameter or `None` if not found. And finally for a local PAK file it will be
+file name.
 
 ### As a library
 
@@ -79,33 +105,6 @@ But in some cases (for example beta firmwares) Reolink gives a Google Drive or a
 These URLs are automatically handled so that you don't have to figure out the "real" download link, and in this case the `url` value(s) in the result JSON will not be the link that you gave but the direct download one.
 
 However the Google Drive folder links (`drive.google.com/drive/folders`) are not handled and in these cases you must find the real URL, or you can also download the file.
-
-## Example
-
-The command
-
-```
-reolinkfw info RLC-410-5MP_20_20052300.zip -i 2
-```
-
-will give something like this:
-
-```json
-[
-  {
-    "firmware_version_prefix": "v3.0.0",
-    "board_type": "IPC_51516M5M",
-    "board_name": "IPC_51516M5M",
-    "build_date": "200523",
-    "display_type_info": "RLC-410-5MP",
-    "detail_machine_type": "IPC_51516M5M",
-    "type": "IPC",
-    "version_file": "20_20052300",
-    "sha256": "6ef371a51b61d7b21d8f7016d90b5fc1ed3eaa8a3f30f1e202a3474bfb4807e5",
-    "file": "RLC-410-5MP_20_20052300.zip"
-  }
-]
-```
 
 ## Notes
 
