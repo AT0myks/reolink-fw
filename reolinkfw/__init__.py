@@ -142,7 +142,7 @@ def _is_pak(file):
 
 def is_pak(file):
     if isinstance(file, bytes):
-        return _is_pak(io.BytesIO(file))
+        return _is_pak(io.BytesIO(file[:4]))
     elif hasattr(file, "read"):
         return _is_pak(file)
     try:
