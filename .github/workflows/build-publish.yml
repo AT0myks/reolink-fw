@@ -1,9 +1,13 @@
 name: Build and publish
-on: push
+
+on:
+    push:
+        tags:
+            - v*
+
 jobs:
     pypi-publish:
         name: Upload release to PyPI
-        if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags')
         runs-on: ubuntu-latest
         environment:
             name: release
@@ -11,11 +15,12 @@ jobs:
         permissions:
             id-token: write
         steps:
-          - uses: actions/checkout@v3
+          - name: Checkout repo
+            uses: actions/checkout@v3
           - name: Set up Python
             uses: actions/setup-python@v4
             with:
-                python-version: "3.x"
+                python-version: "3.9"
           - name: Install dependencies
             run: |
                 python -m pip install --upgrade pip
