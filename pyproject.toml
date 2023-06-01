@@ -27,7 +27,7 @@ classifiers = [
 dependencies = [
     "aiohttp",
     "lxml >= 4.9.2",
-    "pakler ~= 0.1.0",
+    "pakler ~= 0.2.0",
     "pycramfs ~= 1.0.0",
     "PySquashfsImage ~= 0.8.0",
     "python-lzo ~= 1.15",

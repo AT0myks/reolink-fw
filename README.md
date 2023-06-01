@@ -118,9 +118,3 @@ There are 3 types of file systems used for Reolink firmwares:
 
 Some ZIP files provided by Reolink contain multiple PAKs. This is why `get_info`
 always returns a list.
-
-## Issues
-
-The RLN36 PAKs have a very small difference in their structure for which support
-has been added in vmallet/pakler#4. There just hasn't been a new release yet.
-For now you'll get a `Could not guess section count` error with these files.

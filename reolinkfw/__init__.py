@@ -9,6 +9,7 @@ from zipfile import ZipFile, is_zipfile
 import aiohttp
 from lxml.etree import fromstring
 from lxml.html import document_fromstring
+from pakler import PAK
 from pycramfs import Cramfs
 from PySquashfsImage import SquashFsImage
 from ubireader.ubi import ubi
@@ -19,7 +20,6 @@ from ubireader.ubifs.defines import UBIFS_NODE_MAGIC
 from ubireader.ubifs.output import _process_reg_file
 from ubireader.utils import guess_peb_size
 
-from . import mypakler
 from .tmpfile import TempFile
 
 __version__ = "1.1.0"
@@ -44,17 +44,14 @@ async def download(url):
 
 def extract_fs(pakbytes):
     """Return the fs.bin, app.bin or rootfs.bin file as bytes."""
-    section_count = mypakler.guess_section_count(pakbytes)
-    if not section_count:
-        return "Could not guess section count"
-    header = mypakler.read_header(pakbytes, section_count)
-    sections = {s.name: s for s in header.sections if s.name in ("fs", "app", "rootfs")}
-    if len(sections) == 2:
-        return mypakler.extract_section(pakbytes, sections["app"])
-    elif len(sections) == 1:
-        return mypakler.extract_section(pakbytes, sections.popitem()[1])
-    else:
-        return "No section found"
+    with PAK.from_bytes(pakbytes) as pak:
+        sections = {s.name: s for s in pak.sections if s.name in ("fs", "app", "rootfs")}
+        if len(sections) == 2:
+            return pak.extract_section(sections["app"])
+        elif len(sections) == 1:
+            return pak.extract_section(sections.popitem()[1])
+        else:
+            return "No section found"
 
 
 def extract_paks(zip) -> list[tuple[str, bytes]]:
