@@ -15,6 +15,7 @@ from ubireader.ubi import ubi
 from ubireader.ubi.defines import UBI_EC_HDR_MAGIC
 from ubireader.ubi_io import ubi_file, leb_virtual_file
 from ubireader.ubifs import ubifs, walk
+from ubireader.ubifs.defines import UBIFS_NODE_MAGIC
 from ubireader.ubifs.output import _process_reg_file
 from ubireader.utils import guess_peb_size
 
@@ -96,13 +97,22 @@ def get_files_from_ubi(binbytes):
         block_size = guess_peb_size(t)
         ubi_obj = ubi(ubi_file(t, block_size))
         vol_blocks = ubi_obj.images[0].volumes["app"].get_blocks(ubi_obj.blocks)
-        ubifs_obj = ubifs(leb_virtual_file(ubi_obj, vol_blocks))
-        inodes = {}
-        bad_blocks = []
-        walk.index(ubifs_obj, ubifs_obj.master_node.root_lnum, ubifs_obj.master_node.root_offs, inodes, bad_blocks)
-        for dent in inodes[1]['dent']:
-            if dent.name in files:
-                files[dent.name] = _process_reg_file(ubifs_obj, inodes[dent.inum], None)
+        lvf = leb_virtual_file(ubi_obj, vol_blocks)
+        magic = lvf.read(4)
+        if is_ubifs(magic):
+            ubifs_obj = ubifs(lvf)
+            inodes = {}
+            bad_blocks = []
+            walk.index(ubifs_obj, ubifs_obj.master_node.root_lnum, ubifs_obj.master_node.root_offs, inodes, bad_blocks)
+            for dent in inodes[1]['dent']:
+                if dent.name in files:
+                    files[dent.name] = _process_reg_file(ubifs_obj, inodes[dent.inum], None)
+        elif is_squashfs(magic):
+            fsbytes = b''.join(lvf.reader())
+            files = get_files_from_squashfs(fsbytes)
+        else:
+            ubi_obj._file._fhandle.close()
+            raise Exception("unknown image type in UBI")
         ubi_obj._file._fhandle.close()
     return files
 
@@ -126,6 +136,10 @@ def is_squashfs(bytes_):
 
 def is_cramfs(bytes_):
     return bytes_[:4] == CRAMFS_MAGIC
+
+
+def is_ubifs(bytes_):
+    return bytes_[:4] == UBIFS_NODE_MAGIC
 
 
 def is_url(string):
