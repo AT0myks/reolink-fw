@@ -9,7 +9,7 @@ from zipfile import ZipFile, is_zipfile
 import aiohttp
 from lxml.etree import fromstring
 from lxml.html import document_fromstring
-from pakler import PAK
+from pakler import PAK, is_pak_file
 from pycramfs import Cramfs
 from PySquashfsImage import SquashFsImage
 from ubireader.ubi import ubi
@@ -29,7 +29,6 @@ INFO_KEYS = ("firmware_version_prefix", "board_type", "board_name", "build_date"
 
 SQUASHFS_MAGIC = b"hsqs"
 CRAMFS_MAGIC = b'E=\xcd('
-PAK_MAGIC = b"\x13Yr2"
 
 
 async def download(url):
@@ -60,7 +59,7 @@ def extract_paks(zip) -> list[tuple[str, bytes]]:
     with ZipFile(zip) as myzip:
         for name in myzip.namelist():
             with myzip.open(name) as file:
-                if is_pak(file):
+                if is_pak_file(file):
                     paks.append((file.name, myzip.read(name)))
     return paks
 
@@ -147,22 +146,6 @@ def is_local_file(string):
     return Path(string).is_file()
 
 
-def _is_pak(file):
-    return file.read(4) == PAK_MAGIC
-
-
-def is_pak(file):
-    if isinstance(file, bytes):
-        return _is_pak(io.BytesIO(file[:4]))
-    elif hasattr(file, "read"):
-        return _is_pak(file)
-    try:
-        with open(file, "rb") as f:
-            return _is_pak(f)
-    except OSError:
-        return False
-
-
 def sha256(bytes_):
     return hashlib.sha256(bytes_).hexdigest()
 
@@ -208,7 +191,7 @@ async def get_info(file_or_url):
         zip_or_pak_bytes = await download(file_or_url)
         if isinstance(zip_or_pak_bytes, int):
             return [{"file": file_or_url, "error": zip_or_pak_bytes}]
-        elif is_pak(zip_or_pak_bytes):
+        elif is_pak_file(zip_or_pak_bytes):
             pakname = dict(parse_qsl(urlparse(file_or_url).query)).get("name")
             paks = [(pakname, zip_or_pak_bytes)]
         else:
@@ -221,7 +204,7 @@ async def get_info(file_or_url):
         file_or_url = Path(file_or_url)
         if is_zipfile(file_or_url):
             paks = await asyncio.to_thread(extract_paks, file_or_url)
-        elif is_pak(file_or_url):
+        elif is_pak_file(file_or_url):
             with open(file_or_url, "rb") as f:
                 paks = [(file_or_url.name, f.read())]
         else:
