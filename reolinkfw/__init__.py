@@ -1,6 +1,7 @@
 import asyncio
 import hashlib
 import io
+import posixpath
 import re
 from pathlib import Path
 from urllib.parse import parse_qsl, urlparse
@@ -73,10 +74,14 @@ def get_info_from_files(files):
 
 
 def get_files_from_squashfs(binbytes):
+    # Firmwares using squashfs have either one or two file system
+    # sections. When there is only one, the app directory is located at
+    # /mnt/app. Otherwise it's the same as with cramfs and ubifs.
     files = dict.fromkeys(FILES)
     with SquashFsImage.from_bytes(binbytes) as image:
         for name in files:
-            if (file := image.find(name)) is not None:
+            path2 = posixpath.join("/mnt/app", name)
+            if (file := (image.select(name) or image.select(path2))) is not None:
                 files[name] = file.read_bytes()
     return files
 
@@ -105,10 +110,13 @@ def get_files_from_ubi(binbytes):
 
 
 def get_files_from_cramfs(binbytes):
+    # For now all firmwares using cramfs have two file system sections.
+    # The interesting files are in the root directory of the "app" one.
+    # Using select() with a relative path is enough.
     files = dict.fromkeys(FILES)
     with Cramfs.from_bytes(binbytes) as cramfs:
         for name in files:
-            if (file := cramfs.find(name)) is not None:
+            if (file := cramfs.select(name)) is not None:
                 files[name] = file.read_bytes()
     return files
 
