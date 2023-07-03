@@ -2,7 +2,7 @@ import asyncio
 import hashlib
 import io
 import re
-from pathlib import Path, PurePosixPath
+from pathlib import Path
 from urllib.parse import parse_qsl, urlparse
 from zipfile import ZipFile, is_zipfile
 
@@ -74,13 +74,10 @@ def get_info_from_files(files):
 
 def get_files_from_squashfs(binbytes):
     files = dict.fromkeys(FILES)
-    image = SquashFsImage()
-    image.set_file(io.BytesIO(binbytes))
-    for file in image.root.find_all():
-        name = PurePosixPath(file.path).name
-        if name in files:
-            files[name] = file.read_bytes()
-    image.close()
+    with SquashFsImage.from_bytes(binbytes) as image:
+        for name in files:
+            if (file := image.find(name)) is not None:
+                files[name] = file.read_bytes()
     return files
 
 
