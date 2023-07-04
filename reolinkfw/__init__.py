@@ -4,6 +4,7 @@ import io
 import posixpath
 import re
 from pathlib import Path
+from typing import Optional
 from urllib.parse import parse_qsl, urlparse
 from zipfile import ZipFile, is_zipfile
 
@@ -180,36 +181,47 @@ async def direct_download_url(url):
     return url
 
 
-async def get_info(file_or_url):
-    """Retrieve firmware info from an on-disk file or a URL.
+async def get_paks(file_or_url) -> list[tuple[Optional[str], bytes]]:
+    """Return PAK files read from an on-disk file or a URL.
 
-    The file or resource may be a ZIP or a PAK.
+    The file or resource may be a ZIP or a PAK. On success return a
+    list of 2-tuples where each tuple is of the form
+    `(pak_name, pak_bytes)`. When the argument is a URL, `pak_name` may
+    be None. If the file is a ZIP the list might be empty.
     """
     if is_url(file_or_url):
         file_or_url = await direct_download_url(file_or_url)
         zip_or_pak_bytes = await download(file_or_url)
         if isinstance(zip_or_pak_bytes, int):
-            return [{"file": file_or_url, "error": zip_or_pak_bytes}]
+            raise Exception(f"HTTP error {zip_or_pak_bytes}")
         elif is_pak_file(zip_or_pak_bytes):
             pakname = dict(parse_qsl(urlparse(file_or_url).query)).get("name")
-            paks = [(pakname, zip_or_pak_bytes)]
+            return [(pakname, zip_or_pak_bytes)]
         else:
             with io.BytesIO(zip_or_pak_bytes) as f:
                 if is_zipfile(f):
-                    paks = await asyncio.to_thread(extract_paks, f)
-                else:
-                    return [{"file": file_or_url, "error": "Not a ZIP or a PAK file"}]
+                    return await asyncio.to_thread(extract_paks, f)
+            raise Exception("Not a ZIP or a PAK file")
     elif is_local_file(file_or_url):
         file_or_url = Path(file_or_url)
         if is_zipfile(file_or_url):
-            paks = await asyncio.to_thread(extract_paks, file_or_url)
+            return await asyncio.to_thread(extract_paks, file_or_url)
         elif is_pak_file(file_or_url):
             with open(file_or_url, "rb") as f:
-                paks = [(file_or_url.name, f.read())]
-        else:
-            return [{"file": file_or_url, "error": "Not a ZIP or a PAK file"}]
-    else:
-        return [{"arg": file_or_url, "error": "Not a URL or file"}]
+                return [(file_or_url.name, f.read())]
+        raise Exception("Not a ZIP or a PAK file")
+    raise Exception("Not a URL or file")
+
+
+async def get_info(file_or_url):
+    """Retrieve firmware info from an on-disk file or a URL.
+
+    The file or resource may be a ZIP or a PAK.
+    """
+    try:
+        paks = await get_paks(file_or_url)
+    except Exception as e:
+        return [{"file": file_or_url, "error": str(e)}]
     if not paks:
-        return [{"file": file_or_url, "error": "no PAKs found in ZIP file"}]
+        return [{"file": file_or_url, "error": "No PAKs found in ZIP file"}]
     return [{**await get_info_from_pak(pakbytes), "file": file_or_url, "pak": pakname} for pakname, pakbytes in paks]
