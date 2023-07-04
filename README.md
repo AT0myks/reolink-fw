@@ -54,6 +54,8 @@ provided on PyPI.
 
 ### Command line
 
+#### List
+
 ```
 $ reolinkfw info file_or_url
 ```
@@ -83,16 +85,48 @@ $ reolinkfw info RLC-410-5MP_20_20052300.zip -i 2
 argument. If it's a local or remote ZIP file it will be the path of the PAK file
 inside it. If it's a remote PAK file, it will be the value of the `name` query
 parameter or `None` if not found. And finally for a local PAK file it will be
-file name.
+the file name.
+
+#### Extract
+
+```
+usage: reolinkfw extract [-h] [-d DEST] [-f] file_or_url
+
+Extract the file system from a Reolink firmware
+
+positional arguments:
+  file_or_url           URL or on-disk file
+
+optional arguments:
+  -h, --help            show this help message and exit
+  -d DEST, --dest DEST  destination directory. Default: current directory
+  -f, --force           overwrite existing files. Does not apply to UBIFS. Default: False
+```
+
+A firmware's file system can be laid out in two different ways inside a PAK file:
+1. In a single section named `fs` or `rootfs` containing the whole file system
+1. In two sections with the second one named `app` containing the files that go in `/mnt/app`
+
+In the second case, the contents of `app` will be extracted to the appropriate
+location so that the files are organized the same way as they are when the
+camera is running.
+
+Consider the result of this command a one-way operation.
+You should not use it to repack a custom firmware.
 
 ### As a library
 
 ```py
-import reolinkfw
+from pakler import PAK
+from reolinkfw import get_info
+from reolinkfw.extract import extract_pak
+
 url = "https://reolink-storage.s3.amazonaws.com/website/firmware/20200523firmware/RLC-410-5MP_20_20052300.zip"
-print(reolinkfw.get_info(url))
+print(get_info(url))
 file = "/home/ben/RLC-410-5MP_20_20052300.zip"
-print(reolinkfw.get_info(file))
+print(get_info(file))
+with PAK.from_file(file) as pak:
+    extract_pak(pak)
 ```
 
 In most cases where a URL is used, it will be a direct link to the file

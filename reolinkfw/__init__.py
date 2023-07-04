@@ -31,6 +31,9 @@ __version__ = "1.1.0"
 FILES = ("version_file", "version.json", "dvr.xml", "dvr", "router")
 INFO_KEYS = ("firmware_version_prefix", "board_type", "board_name", "build_date", "display_type_info", "detail_machine_type", "type")
 
+ROOTFS_SECTIONS = ["fs", "rootfs"]
+FS_SECTIONS = ROOTFS_SECTIONS + ["app"]
+
 
 async def download(url):
     """Return resource as bytes.
@@ -45,7 +48,7 @@ async def download(url):
 def extract_fs(pakbytes):
     """Return the fs.bin, app.bin or rootfs.bin file as bytes."""
     with PAK.from_bytes(pakbytes) as pak:
-        sections = {s.name: s for s in pak.sections if s.name in ("fs", "app", "rootfs")}
+        sections = {s.name: s for s in pak.sections if s.name in FS_SECTIONS}
         if len(sections) == 2:
             return pak.extract_section(sections["app"])
         elif len(sections) == 1:
