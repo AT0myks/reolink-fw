@@ -1,5 +1,4 @@
 import asyncio
-import hashlib
 import io
 import posixpath
 import re
@@ -14,20 +13,23 @@ from lxml.html import document_fromstring
 from pakler import PAK, is_pak_file
 from pycramfs import Cramfs
 from PySquashfsImage import SquashFsImage
-from ubireader.ubi.defines import UBI_EC_HDR_MAGIC
 from ubireader.ubifs import ubifs, walk
-from ubireader.ubifs.defines import UBIFS_NODE_MAGIC
 from ubireader.ubifs.output import _process_reg_file
 
-from reolinkfw.util import DummyLEB, get_fs_from_ubi
+from reolinkfw.util import (
+    DummyLEB,
+    get_fs_from_ubi,
+    is_cramfs,
+    is_squashfs,
+    is_ubi,
+    is_ubifs,
+    sha256
+)
 
 __version__ = "1.1.0"
 
 FILES = ("version_file", "version.json", "dvr.xml", "dvr", "router")
 INFO_KEYS = ("firmware_version_prefix", "board_type", "board_name", "build_date", "display_type_info", "detail_machine_type", "type")
-
-SQUASHFS_MAGIC = b"hsqs"
-CRAMFS_MAGIC = b'E=\xcd('
 
 
 async def download(url):
@@ -122,32 +124,12 @@ def get_files_from_cramfs(binbytes):
     return files
 
 
-def is_ubi(bytes_):
-    return bytes_[:4] == UBI_EC_HDR_MAGIC
-
-
-def is_squashfs(bytes_):
-    return bytes_[:4] == SQUASHFS_MAGIC
-
-
-def is_cramfs(bytes_):
-    return bytes_[:4] == CRAMFS_MAGIC
-
-
-def is_ubifs(bytes_):
-    return bytes_[:4] == UBIFS_NODE_MAGIC
-
-
 def is_url(string):
     return str(string).startswith("http")
 
 
 def is_local_file(string):
     return Path(string).is_file()
-
-
-def sha256(bytes_):
-    return hashlib.sha256(bytes_).hexdigest()
 
 
 async def get_info_from_pak(pakbytes):
