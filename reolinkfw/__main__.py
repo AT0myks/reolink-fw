@@ -6,10 +6,9 @@ import json
 import sys
 from pathlib import Path, PurePath
 
-from pakler import PAK
 from reolinkfw import __version__, get_info, get_paks
 from reolinkfw.extract import extract_pak
-from reolinkfw.util import sha256
+from reolinkfw.util import sha256_pak
 
 
 def info(args: argparse.Namespace) -> None:
@@ -22,10 +21,10 @@ async def extract(args: argparse.Namespace) -> None:
     if not paks:
         raise Exception("No PAKs found in ZIP file")
     dest = Path.cwd() if args.dest is None else args.dest
-    for pakname, pakbytes in paks:
-        name = sha256(pakbytes) if pakname is None else PurePath(pakname).stem
-        with PAK.from_bytes(pakbytes) as pak:
-            await asyncio.to_thread(extract_pak, pak, dest / name, args.force)
+    for pakname, pakfile in paks:
+        name = sha256_pak(pakfile) if pakname is None else PurePath(pakname).stem
+        await asyncio.to_thread(extract_pak, pakfile, dest / name, args.force)
+        pakfile.close()
 
 
 def main():

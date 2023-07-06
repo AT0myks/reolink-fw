@@ -23,7 +23,7 @@ from reolinkfw.util import (
     is_squashfs,
     is_ubi,
     is_ubifs,
-    sha256
+    sha256_pak
 )
 
 __version__ = "1.1.0"
@@ -45,26 +45,30 @@ async def download(url):
             return await resp.read() if resp.status == 200 else resp.status
 
 
-def extract_fs(pakbytes):
+def extract_fs(pak: PAK):
     """Return the fs.bin, app.bin or rootfs.bin file as bytes."""
-    with PAK.from_bytes(pakbytes) as pak:
-        sections = {s.name: s for s in pak.sections if s.name in FS_SECTIONS}
-        if len(sections) == 2:
-            return pak.extract_section(sections["app"])
-        elif len(sections) == 1:
-            return pak.extract_section(sections.popitem()[1])
-        else:
-            return "No section found"
+    sections = {s.name: s for s in pak.sections if s.name in FS_SECTIONS}
+    if len(sections) == 2:
+        return pak.extract_section(sections["app"])
+    elif len(sections) == 1:
+        return pak.extract_section(sections.popitem()[1])
+    else:
+        return "No section found"
 
 
-def extract_paks(zip) -> list[tuple[str, bytes]]:
-    """Return a list of tuples, one for each PAK file found in the ZIP."""
+def extract_paks(zip) -> list[tuple[str, PAK]]:
+    """Return a list of tuples, one for each PAK file found in the ZIP.
+
+    It is the caller's responsibility to close the PAK files.
+    """
     paks = []
     with ZipFile(zip) as myzip:
         for name in myzip.namelist():
-            with myzip.open(name) as file:
-                if is_pak_file(file):
-                    paks.append((file.name, myzip.read(name)))
+            file = myzip.open(name)
+            if is_pak_file(file):
+                paks.append((file.name, PAK.from_fd(file)))
+            else:
+                file.close()
     return paks
 
 
@@ -135,9 +139,9 @@ def is_local_file(string):
     return Path(string).is_file()
 
 
-async def get_info_from_pak(pakbytes):
-    ha = sha256(pakbytes)
-    binbytes = await asyncio.to_thread(extract_fs, pakbytes)
+async def get_info_from_pak(pak: PAK):
+    ha = await asyncio.to_thread(sha256_pak, pak)
+    binbytes = await asyncio.to_thread(extract_fs, pak)
     if isinstance(binbytes, str):
         return {"error": binbytes, "sha256": ha}
     if is_cramfs(binbytes):
@@ -166,13 +170,14 @@ async def direct_download_url(url):
     return url
 
 
-async def get_paks(file_or_url) -> list[tuple[Optional[str], bytes]]:
+async def get_paks(file_or_url) -> list[tuple[Optional[str], PAK]]:
     """Return PAK files read from an on-disk file or a URL.
 
     The file or resource may be a ZIP or a PAK. On success return a
     list of 2-tuples where each tuple is of the form
-    `(pak_name, pak_bytes)`. When the argument is a URL, `pak_name` may
+    `(pak_name, pak_file)`. When the argument is a URL, `pak_name` may
     be None. If the file is a ZIP the list might be empty.
+    It is the caller's responsibility to close the PAK files.
     """
     if is_url(file_or_url):
         file_or_url = await direct_download_url(file_or_url)
@@ -181,19 +186,19 @@ async def get_paks(file_or_url) -> list[tuple[Optional[str], bytes]]:
             raise Exception(f"HTTP error {zip_or_pak_bytes}")
         elif is_pak_file(zip_or_pak_bytes):
             pakname = dict(parse_qsl(urlparse(file_or_url).query)).get("name")
-            return [(pakname, zip_or_pak_bytes)]
+            return [(pakname, PAK.from_bytes(zip_or_pak_bytes))]
         else:
-            with io.BytesIO(zip_or_pak_bytes) as f:
-                if is_zipfile(f):
-                    return await asyncio.to_thread(extract_paks, f)
+            zipfile = io.BytesIO(zip_or_pak_bytes)
+            if is_zipfile(zipfile):
+                return await asyncio.to_thread(extract_paks, zipfile)
+            zipfile.close()
             raise Exception("Not a ZIP or a PAK file")
     elif is_local_file(file_or_url):
         file_or_url = Path(file_or_url)
         if is_zipfile(file_or_url):
             return await asyncio.to_thread(extract_paks, file_or_url)
         elif is_pak_file(file_or_url):
-            with open(file_or_url, "rb") as f:
-                return [(file_or_url.name, f.read())]
+            return [(file_or_url.name, PAK.from_file(file_or_url))]
         raise Exception("Not a ZIP or a PAK file")
     raise Exception("Not a URL or file")
 
@@ -209,4 +214,7 @@ async def get_info(file_or_url):
         return [{"file": file_or_url, "error": str(e)}]
     if not paks:
         return [{"file": file_or_url, "error": "No PAKs found in ZIP file"}]
-    return [{**await get_info_from_pak(pakbytes), "file": file_or_url, "pak": pakname} for pakname, pakbytes in paks]
+    info = [{**await get_info_from_pak(pakfile), "file": file_or_url, "pak": pakname} for pakname, pakfile in paks]
+    for _, pakfile in paks:
+        pakfile.close()
+    return info

@@ -1,7 +1,9 @@
 import hashlib
 import io
 from contextlib import contextmanager
+from functools import partial
 
+from pakler import PAK
 from pycramfs.const import MAGIC_BYTES as CRAMFS_MAGIC
 from PySquashfsImage.const import SQUASHFS_MAGIC
 from ubireader.ubi import ubi
@@ -84,5 +86,9 @@ def is_ubifs(bytes_):
     return bytes_[:4] == UBIFS_MAGIC
 
 
-def sha256(bytes_):
-    return hashlib.sha256(bytes_).hexdigest()
+def sha256_pak(pak: PAK) -> str:
+    sha = hashlib.sha256()
+    pak._fd.seek(0)
+    for block in iter(partial(pak._fd.read, 1024**2), b''):
+        sha.update(block)
+    return sha.hexdigest()
