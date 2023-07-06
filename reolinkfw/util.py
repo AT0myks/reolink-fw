@@ -4,17 +4,11 @@ from contextlib import contextmanager
 from functools import partial
 
 from pakler import PAK
-from pycramfs.const import MAGIC_BYTES as CRAMFS_MAGIC
-from PySquashfsImage.const import SQUASHFS_MAGIC
 from ubireader.ubi import ubi
-from ubireader.ubi.defines import UBI_EC_HDR_MAGIC as UBI_MAGIC
 from ubireader.ubi_io import ubi_file, leb_virtual_file
-from ubireader.ubifs.defines import UBIFS_NODE_MAGIC as UBIFS_MAGIC
 from ubireader.utils import guess_peb_size
 
 from reolinkfw.tmpfile import TempFile
-
-SQUASHFS_MAGIC = SQUASHFS_MAGIC.to_bytes(4, "little")
 
 
 class DummyLEB:
@@ -68,22 +62,6 @@ def get_fs_from_ubi(binbytes):
             ubi_obj = ubi(ubifile)
             vol_blocks = ubi_obj.images[0].volumes.popitem()[1].get_blocks(ubi_obj.blocks)
             return b''.join(leb_virtual_file(ubi_obj, vol_blocks).reader())
-
-
-def is_ubi(bytes_):
-    return bytes_[:4] == UBI_MAGIC
-
-
-def is_squashfs(bytes_):
-    return bytes_[:4] == SQUASHFS_MAGIC
-
-
-def is_cramfs(bytes_):
-    return bytes_[:4] == CRAMFS_MAGIC
-
-
-def is_ubifs(bytes_):
-    return bytes_[:4] == UBIFS_MAGIC
 
 
 def sha256_pak(pak: PAK) -> str:

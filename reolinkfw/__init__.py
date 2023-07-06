@@ -2,6 +2,7 @@ import asyncio
 import io
 import posixpath
 import re
+from enum import Enum
 from pathlib import Path
 from typing import Optional
 from urllib.parse import parse_qsl, urlparse
@@ -12,19 +13,15 @@ from lxml.etree import fromstring
 from lxml.html import document_fromstring
 from pakler import PAK, is_pak_file
 from pycramfs import Cramfs
+from pycramfs.const import MAGIC_BYTES as CRAMFS_MAGIC
 from PySquashfsImage import SquashFsImage
+from PySquashfsImage.const import SQUASHFS_MAGIC
+from ubireader.ubi.defines import UBI_EC_HDR_MAGIC as UBI_MAGIC
 from ubireader.ubifs import ubifs, walk
+from ubireader.ubifs.defines import UBIFS_NODE_MAGIC as UBIFS_MAGIC
 from ubireader.ubifs.output import _process_reg_file
 
-from reolinkfw.util import (
-    DummyLEB,
-    get_fs_from_ubi,
-    is_cramfs,
-    is_squashfs,
-    is_ubi,
-    is_ubifs,
-    sha256_pak
-)
+from reolinkfw.util import DummyLEB, get_fs_from_ubi, sha256_pak
 
 __version__ = "1.1.0"
 
@@ -33,6 +30,20 @@ INFO_KEYS = ("firmware_version_prefix", "board_type", "board_name", "build_date"
 
 ROOTFS_SECTIONS = ["fs", "rootfs"]
 FS_SECTIONS = ROOTFS_SECTIONS + ["app"]
+
+
+class FileSystem(Enum):
+    CRAMFS = CRAMFS_MAGIC
+    SQUASHFS = SQUASHFS_MAGIC.to_bytes(4, "little")
+    UBI = UBI_MAGIC  # Not a file system
+    UBIFS = UBIFS_MAGIC
+
+    @classmethod
+    def from_magic(cls, key, default=None):
+        try:
+            return cls(key)
+        except ValueError:
+            return default
 
 
 async def download(url):
@@ -111,12 +122,12 @@ def get_files_from_ubifs(binbytes):
 
 def get_files_from_ubi(binbytes):
     fsbytes = get_fs_from_ubi(binbytes)
-    if is_ubifs(fsbytes):
+    fs = FileSystem.from_magic(fsbytes[:4])
+    if fs == FileSystem.UBIFS:
         return get_files_from_ubifs(fsbytes)
-    elif is_squashfs(fsbytes):
+    elif fs == FileSystem.SQUASHFS:
         return get_files_from_squashfs(fsbytes)
-    else:
-        raise Exception("unknown file system in UBI")
+    raise Exception("Unknown file system in UBI")
 
 
 def get_files_from_cramfs(binbytes):
@@ -144,13 +155,12 @@ async def get_info_from_pak(pak: PAK):
     binbytes = await asyncio.to_thread(extract_fs, pak)
     if isinstance(binbytes, str):
         return {"error": binbytes, "sha256": ha}
-    if is_cramfs(binbytes):
-        func = get_files_from_cramfs
-    elif is_ubi(binbytes):
-        func = get_files_from_ubi
-    elif is_squashfs(binbytes):
-        func = get_files_from_squashfs
-    else:
+    func = {
+        FileSystem.CRAMFS: get_files_from_cramfs,
+        FileSystem.UBI: get_files_from_ubi,
+        FileSystem.SQUASHFS: get_files_from_squashfs,
+    }.get(FileSystem.from_magic(binbytes[:4]))
+    if func is None:
         return {"error": "Unrecognized image type", "sha256": ha}
     files = await asyncio.to_thread(func, binbytes)
     info = get_info_from_files(files)

@@ -10,31 +10,25 @@ from PySquashfsImage.extract import extract_dir as extract_squashfs
 from ubireader.ubifs import ubifs
 from ubireader.ubifs.output import extract_files as extract_ubifs
 
-from reolinkfw import FS_SECTIONS, ROOTFS_SECTIONS
-from reolinkfw.util import (
-    DummyLEB,
-    get_fs_from_ubi,
-    is_cramfs,
-    is_squashfs,
-    is_ubi,
-    is_ubifs
-)
+from reolinkfw import FS_SECTIONS, ROOTFS_SECTIONS, FileSystem
+from reolinkfw.util import DummyLEB, get_fs_from_ubi
 
 
 def extract_file_system(fs_bytes, dest: Path = None):
     dest = (Path.cwd() / "reolink_fs") if dest is None else dest
     dest.mkdir(parents=True, exist_ok=True)
-    if is_ubi(fs_bytes):
+    fs = FileSystem.from_magic(fs_bytes[:4])
+    if fs == FileSystem.UBI:
         extract_file_system(get_fs_from_ubi(fs_bytes), dest)
-    elif is_ubifs(fs_bytes):
+    elif fs == FileSystem.UBIFS:
         with DummyLEB.from_bytes(fs_bytes) as leb:
             with redirect_stdout(StringIO()):
                 # If files already exist they are not written again.
                 extract_ubifs(ubifs(leb), dest)
-    elif is_squashfs(fs_bytes):
+    elif fs == FileSystem.SQUASHFS:
         with SquashFsImage.from_bytes(fs_bytes) as image:
             extract_squashfs(image.root, dest, True)
-    elif is_cramfs(fs_bytes):
+    elif fs == FileSystem.CRAMFS:
         with Cramfs.from_bytes(fs_bytes) as image:
             extract_cramfs(image.rootdir, dest, True)
     else:
