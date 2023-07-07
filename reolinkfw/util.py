@@ -2,13 +2,21 @@ import hashlib
 import io
 from contextlib import contextmanager
 from functools import partial
+from os import scandir
+from pathlib import Path
+from shutil import disk_usage
+from tempfile import gettempdir as _gettempdir
+from zipfile import is_zipfile
 
-from pakler import PAK
+from pakler import PAK, is_pak_file
 from ubireader.ubi import ubi
 from ubireader.ubi_io import ubi_file, leb_virtual_file
 from ubireader.utils import guess_peb_size
 
 from reolinkfw.tmpfile import TempFile
+
+ONEMIB = 1024**2
+ONEGIB = 1024**3
 
 
 class DummyLEB:
@@ -69,6 +77,57 @@ def get_fs_from_ubi(fd, size, offset=0) -> bytes:
 def sha256_pak(pak: PAK) -> str:
     sha = hashlib.sha256()
     pak._fd.seek(0)
-    for block in iter(partial(pak._fd.read, 1024**2), b''):
+    for block in iter(partial(pak._fd.read, ONEMIB), b''):
         sha.update(block)
     return sha.hexdigest()
+
+
+def dir_size(path):
+    size = 0
+    try:
+        with scandir(path) as it:
+            for entry in it:
+                if entry.is_dir(follow_symlinks=False):
+                    size += dir_size(entry.path)
+                elif entry.is_file(follow_symlinks=False):
+                    size += entry.stat().st_size
+    except OSError:
+        pass
+    return size
+
+
+def gettempdir() -> Path:
+    return Path(_gettempdir()) / "reolinkfwcache"
+
+
+def get_cache_file(url: str) -> Path:
+    file = gettempdir() / hashlib.sha256(url.encode("utf8")).hexdigest()
+    if is_zipfile(file) or is_pak_file(file):
+        return file
+    try:
+        with open(file, 'r', encoding="utf8") as f:
+            return gettempdir() / f.read(256)
+    except (OSError, UnicodeDecodeError):
+        return file
+
+
+def has_cache(url: str) -> bool:
+    return get_cache_file(url).is_file()
+
+
+def make_cache_file(url: str, filebytes, name=None) -> bool:
+    tempdir = gettempdir()
+    tempdir.mkdir(exist_ok=True)
+    if disk_usage(tempdir).free < ONEGIB or dir_size(tempdir) > ONEGIB:
+        return False
+    sha = hashlib.sha256(url.encode("utf8")).hexdigest()
+    name = sha if not isinstance(name, str) else name
+    try:
+        with open(tempdir / name, "wb") as f:
+            f.write(filebytes)
+        if name != sha:
+            with open(tempdir / sha, 'w', encoding="utf8") as f:
+                f.write(name)
+    except OSError:
+        return False
+    return True

@@ -21,7 +21,14 @@ from ubireader.ubifs import ubifs, walk
 from ubireader.ubifs.defines import UBIFS_NODE_MAGIC as UBIFS_MAGIC
 from ubireader.ubifs.output import _process_reg_file
 
-from reolinkfw.util import DummyLEB, get_fs_from_ubi, sha256_pak
+from reolinkfw.util import (
+    DummyLEB,
+    get_cache_file,
+    get_fs_from_ubi,
+    has_cache,
+    make_cache_file,
+    sha256_pak
+)
 
 __version__ = "1.1.0"
 
@@ -170,7 +177,7 @@ async def direct_download_url(url):
     return url
 
 
-async def get_paks(file_or_url) -> list[tuple[Optional[str], PAK]]:
+async def get_paks(file_or_url, use_cache: bool = True) -> list[tuple[Optional[str], PAK]]:
     """Return PAK files read from an on-disk file or a URL.
 
     The file or resource may be a ZIP or a PAK. On success return a
@@ -180,12 +187,16 @@ async def get_paks(file_or_url) -> list[tuple[Optional[str], PAK]]:
     It is the caller's responsibility to close the PAK files.
     """
     if is_url(file_or_url):
+        if use_cache and has_cache(file_or_url):
+            return await get_paks(get_cache_file(file_or_url))
         file_or_url = await direct_download_url(file_or_url)
         zip_or_pak_bytes = await download(file_or_url)
         if isinstance(zip_or_pak_bytes, int):
             raise Exception(f"HTTP error {zip_or_pak_bytes}")
-        elif is_pak_file(zip_or_pak_bytes):
-            pakname = dict(parse_qsl(urlparse(file_or_url).query)).get("name")
+        pakname = dict(parse_qsl(urlparse(file_or_url).query)).get("name")
+        if use_cache:
+            make_cache_file(file_or_url, zip_or_pak_bytes, pakname)
+        if is_pak_file(zip_or_pak_bytes):
             return [(pakname, PAK.from_bytes(zip_or_pak_bytes))]
         else:
             zipfile = io.BytesIO(zip_or_pak_bytes)
@@ -203,13 +214,13 @@ async def get_paks(file_or_url) -> list[tuple[Optional[str], PAK]]:
     raise Exception("Not a URL or file")
 
 
-async def get_info(file_or_url):
+async def get_info(file_or_url, use_cache: bool = True):
     """Retrieve firmware info from an on-disk file or a URL.
 
     The file or resource may be a ZIP or a PAK.
     """
     try:
-        paks = await get_paks(file_or_url)
+        paks = await get_paks(file_or_url, use_cache)
     except Exception as e:
         return [{"file": file_or_url, "error": str(e)}]
     if not paks:

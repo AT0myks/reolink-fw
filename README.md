@@ -90,7 +90,7 @@ the file name.
 #### Extract
 
 ```
-usage: reolinkfw extract [-h] [-d DEST] [-f] file_or_url
+usage: reolinkfw extract [-h] [--no-cache] [-d DEST] [-f] file_or_url
 
 Extract the file system from a Reolink firmware
 
@@ -99,6 +99,7 @@ positional arguments:
 
 optional arguments:
   -h, --help            show this help message and exit
+  --no-cache            don't use cache for remote files (URLs)
   -d DEST, --dest DEST  destination directory. Default: current directory
   -f, --force           overwrite existing files. Does not apply to UBIFS. Default: False
 ```
