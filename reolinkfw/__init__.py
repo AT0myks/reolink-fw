@@ -56,17 +56,6 @@ async def download(url):
             return await resp.read() if resp.status == 200 else resp.status
 
 
-def extract_fs(pak: PAK):
-    """Return the fs.bin, app.bin or rootfs.bin file as bytes."""
-    sections = {s.name: s for s in pak.sections if s.name in FS_SECTIONS}
-    if len(sections) == 2:
-        return pak.extract_section(sections["app"])
-    elif len(sections) == 1:
-        return pak.extract_section(sections.popitem()[1])
-    else:
-        return "No section found"
-
-
 def extract_paks(zip) -> list[tuple[str, PAK]]:
     """Return a list of tuples, one for each PAK file found in the ZIP.
 
@@ -94,12 +83,12 @@ def get_info_from_files(files):
     return info
 
 
-def get_files_from_squashfs(binbytes):
+def get_files_from_squashfs(fd, offset=0, closefd=True):
     # Firmwares using squashfs have either one or two file system
     # sections. When there is only one, the app directory is located at
     # /mnt/app. Otherwise it's the same as with cramfs and ubifs.
     files = dict.fromkeys(FILES)
-    with SquashFsImage.from_bytes(binbytes) as image:
+    with SquashFsImage(fd, offset, closefd) as image:
         for name in files:
             path2 = posixpath.join("/mnt/app", name)
             if (file := (image.select(name) or image.select(path2))) is not None:
@@ -120,22 +109,22 @@ def get_files_from_ubifs(binbytes):
     return files
 
 
-def get_files_from_ubi(binbytes):
-    fsbytes = get_fs_from_ubi(binbytes)
+def get_files_from_ubi(fd, size, offset=0):
+    fsbytes = get_fs_from_ubi(fd, size, offset)
     fs = FileSystem.from_magic(fsbytes[:4])
     if fs == FileSystem.UBIFS:
         return get_files_from_ubifs(fsbytes)
     elif fs == FileSystem.SQUASHFS:
-        return get_files_from_squashfs(fsbytes)
+        return get_files_from_squashfs(io.BytesIO(fsbytes))
     raise Exception("Unknown file system in UBI")
 
 
-def get_files_from_cramfs(binbytes):
+def get_files_from_cramfs(fd, offset=0, closefd=True):
     # For now all firmwares using cramfs have two file system sections.
     # The interesting files are in the root directory of the "app" one.
     # Using select() with a relative path is enough.
     files = dict.fromkeys(FILES)
-    with Cramfs.from_bytes(binbytes) as cramfs:
+    with Cramfs.from_fd(fd, offset, closefd) as cramfs:
         for name in files:
             if (file := cramfs.select(name)) is not None:
                 files[name] = file.read_bytes()
@@ -152,17 +141,18 @@ def is_local_file(string):
 
 async def get_info_from_pak(pak: PAK):
     ha = await asyncio.to_thread(sha256_pak, pak)
-    binbytes = await asyncio.to_thread(extract_fs, pak)
-    if isinstance(binbytes, str):
-        return {"error": binbytes, "sha256": ha}
-    func = {
-        FileSystem.CRAMFS: get_files_from_cramfs,
-        FileSystem.UBI: get_files_from_ubi,
-        FileSystem.SQUASHFS: get_files_from_squashfs,
-    }.get(FileSystem.from_magic(binbytes[:4]))
-    if func is None:
+    fs_sections = [s for s in pak.sections if s.name in FS_SECTIONS]
+    app = fs_sections[-1]
+    pak._fd.seek(app.start)
+    fs = FileSystem.from_magic(pak._fd.read(4))
+    if fs == FileSystem.CRAMFS:
+        files = await asyncio.to_thread(get_files_from_cramfs, pak._fd, app.start, False)
+    elif fs == FileSystem.UBI:
+        files = await asyncio.to_thread(get_files_from_ubi, pak._fd, app.len, app.start)
+    elif fs == FileSystem.SQUASHFS:
+        files = await asyncio.to_thread(get_files_from_squashfs, pak._fd, app.start, False)
+    else:
         return {"error": "Unrecognized image type", "sha256": ha}
-    files = await asyncio.to_thread(func, binbytes)
     info = get_info_from_files(files)
     return {**info, "sha256": ha}
 

@@ -54,8 +54,10 @@ def closing_ubifile(ubifile):
         ubifile._fhandle.close()
 
 
-def get_fs_from_ubi(binbytes):
+def get_fs_from_ubi(fd, size, offset=0) -> bytes:
     """Return the first file system that sits on top of the UBI volume."""
+    fd.seek(offset)
+    binbytes = fd.read(size)
     with TempFile(binbytes) as t:
         block_size = guess_peb_size(t)
         with closing_ubifile(ubi_file(t, block_size)) as ubifile:
