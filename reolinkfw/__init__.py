@@ -11,7 +11,7 @@ from zipfile import ZipFile, is_zipfile
 import aiohttp
 from lxml.etree import fromstring
 from lxml.html import document_fromstring
-from pakler import PAK, is_pak_file
+from pakler import PAK, Section, is_pak_file
 from pycramfs import Cramfs
 from pycramfs.const import MAGIC_BYTES as CRAMFS_MAGIC
 from PySquashfsImage import SquashFsImage
@@ -146,6 +146,18 @@ def is_local_file(string):
     return Path(string).is_file()
 
 
+def get_fs_info(pak: PAK, fs_sections: list[Section]) -> list[dict[str, str]]:
+    result = []
+    for section in fs_sections:
+        pak._fd.seek(section.start)
+        fs = FileSystem.from_magic(pak._fd.read(4))
+        result.append({
+            "name": section.name,
+            "type": fs.name.lower() if fs is not None else "unknown"
+        })
+    return result
+
+
 async def get_info_from_pak(pak: PAK):
     ha = await asyncio.to_thread(sha256_pak, pak)
     fs_sections = [s for s in pak.sections if s.name in FS_SECTIONS]
@@ -161,7 +173,7 @@ async def get_info_from_pak(pak: PAK):
     else:
         return {"error": "Unrecognized image type", "sha256": ha}
     info = get_info_from_files(files)
-    return {**info, "sha256": ha}
+    return {**info, "filesystems": get_fs_info(pak, fs_sections), "sha256": ha}
 
 
 async def direct_download_url(url):

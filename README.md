@@ -74,6 +74,12 @@ $ reolinkfw info RLC-410-5MP_20_20052300.zip -i 2
     "detail_machine_type": "IPC_51516M5M",
     "type": "IPC",
     "version_file": "20_20052300",
+    "filesystems": [
+      {
+        "name": "fs",
+        "type": "squashfs"
+      }
+    ],
     "sha256": "6ef371a51b61d7b21d8f7016d90b5fc1ed3eaa8a3f30f1e202a3474bfb4807e5",
     "file": "RLC-410-5MP_20_20052300.zip",
     "pak": "IPC_51516M5M.20_20052300.RLC-410-5MP.OV05A10.5MP.REOLINK.pak"
