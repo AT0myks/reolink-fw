@@ -28,7 +28,7 @@ dependencies = [
     "aiohttp",
     "lxml >= 4.9.2",
     "pakler ~= 0.2.0",
-    "pycramfs ~= 1.0.0",
+    "pycramfs ~= 1.1.0",
     "PySquashfsImage ~= 0.9.0",
     "python-lzo ~= 1.15",
     "ubi-reader != 0.8.7, != 0.8.8"
