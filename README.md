@@ -57,13 +57,39 @@ provided on PyPI.
 #### Info
 
 ```
-$ reolinkfw info file_or_url
+usage: reolinkfw info [-h] [--no-cache] [-j [indent]] file_or_url
+
+positional arguments:
+  file_or_url                   URL or on-disk file
+
+optional arguments:
+  -h, --help                    show this help message and exit
+  --no-cache                    don't use cache for remote files (URLs)
+  -j [indent], --json [indent]  JSON output with optional indentation level for pretty print
 ```
 
 Example:
 
 ```
-$ reolinkfw info RLC-410-5MP_20_20052300.zip -i 2
+$ reolinkfw info RLC-410-5MP_20_20052300.zip
+IPC_51516M5M.20_20052300.RLC-410-5MP.OV05A10.5MP.REOLINK.pak
+Model:                RLC-410-5MP
+Hardware info:        IPC_51516M5M
+Device type:          IPC
+Firmware version:     v3.0.0.20_20052300
+Build date:           2020-05-23
+Architecture:         MIPS
+OS:                   Linux
+Kernel image name:    Linux-4.1.0
+U-Boot version:       U-Boot 2014.07 (Feb 26 2019 - 18:20:07)
+File system:          squashfs
+File system sections: fs
+```
+
+Or with JSON output:
+
+```
+$ reolinkfw info RLC-410-5MP_20_20052300.zip -j 2
 [
   {
     "firmware_version_prefix": "v3.0.0",

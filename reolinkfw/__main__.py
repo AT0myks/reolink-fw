@@ -1,22 +1,50 @@
 #!/usr/bin/env python3
 
-import argparse
 import asyncio
 import json
 import sys
+from argparse import ArgumentParser, Namespace
+from datetime import datetime
 from pathlib import Path, PurePath
 
 from reolinkfw import __version__, get_info, get_paks
 from reolinkfw.extract import extract_pak
 from reolinkfw.util import sha256_pak
 
-
-async def info(args: argparse.Namespace) -> None:
-    info = await get_info(args.file_or_url, not args.no_cache)
-    print(json.dumps(info, indent=args.indent, default=str))
+HW_FIELDS = ("board_type", "detail_machine_type", "board_name")
 
 
-async def extract(args: argparse.Namespace) -> None:
+async def info(args: Namespace) -> None:
+    pak_infos = await get_info(args.file_or_url, not args.no_cache)
+    if args.json is None:
+        width = 21
+        for idx, info in enumerate(pak_infos):
+            info = Namespace(**info)
+            fs_types = set(fs["type"] for fs in info.filesystems)
+            fs_names = [fs["name"] for fs in info.filesystems]
+            version = f"{info.firmware_version_prefix}.{info.version_file}"
+            hw_names = set(getattr(info, key) for key in HW_FIELDS)
+            build_date = datetime.strptime(info.build_date, "%y%m%d").date()
+            print(info.pak)
+            print(f"{'Model:':{width}}", info.display_type_info)
+            print(f"{'Hardware info:':{width}}", ', '.join(sorted(hw_names)))
+            print(f"{'Device type:':{width}}", info.type)
+            print(f"{'Firmware version:':{width}}", version)
+            print(f"{'Build date:':{width}}", build_date)
+            print(f"{'Architecture:':{width}}", info.architecture)
+            print(f"{'OS:':{width}}", info.os)
+            print(f"{'Kernel image name:':{width}}", info.kernel_image_name)
+            print(f"{'U-Boot version:':{width}}", info.uboot_version or "Unknown")
+            print(f"{'File system:':{width}}", ', '.join(sorted(fs_types)))
+            print(f"{'File system sections:':{width}}", ', '.join(fs_names))
+            if idx != len(pak_infos) - 1:
+                print()
+    else:
+        indent = None if args.json < 0 else args.json
+        print(json.dumps(pak_infos, indent=indent, default=str))
+
+
+async def extract(args: Namespace) -> None:
     paks = await get_paks(args.file_or_url, not args.no_cache)
     if not paks:
         raise Exception("No PAKs found in ZIP file")
@@ -28,16 +56,16 @@ async def extract(args: argparse.Namespace) -> None:
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Extract information and files from Reolink firmwares")
+    parser = ArgumentParser(description="Extract information and files from Reolink firmwares")
     parser.add_argument("-V", "--version", action="version", version=f"%(prog)s {__version__}")
     subparsers = parser.add_subparsers(required=True)
 
-    pcache = argparse.ArgumentParser(add_help=False)
+    pcache = ArgumentParser(add_help=False)
     pcache.add_argument("--no-cache", action="store_true", help="don't use cache for remote files (URLs)")
 
     parser_i = subparsers.add_parser("info", parents=[pcache])
     parser_i.add_argument("file_or_url", help="URL or on-disk file")
-    parser_i.add_argument("-i", "--indent", type=int, help="indent level for pretty print")
+    parser_i.add_argument("-j", "--json", nargs='?', type=int, const=-1, metavar="indent", help="JSON output with optional indentation level for pretty print")
     parser_i.set_defaults(func=info)
 
     descex = "Extract the file system from a Reolink firmware"
