@@ -2,7 +2,6 @@ import asyncio
 import io
 import posixpath
 import re
-from enum import Enum
 from pathlib import Path
 from typing import Optional
 from urllib.parse import parse_qsl, urlparse
@@ -13,16 +12,14 @@ from lxml.etree import fromstring
 from lxml.html import document_fromstring
 from pakler import PAK, Section, is_pak_file
 from pycramfs import Cramfs
-from pycramfs.const import MAGIC_BYTES as CRAMFS_MAGIC
 from PySquashfsImage import SquashFsImage
-from PySquashfsImage.const import SQUASHFS_MAGIC
-from ubireader.ubi.defines import UBI_EC_HDR_MAGIC as UBI_MAGIC
 from ubireader.ubifs import ubifs, walk
-from ubireader.ubifs.defines import UBIFS_NODE_MAGIC as UBIFS_MAGIC
 from ubireader.ubifs.output import _process_reg_file
 
+from reolinkfw.uboot import get_arch_name, get_uboot_version, get_uimage_header
 from reolinkfw.util import (
     DummyLEB,
+    FileType,
     get_cache_file,
     get_fs_from_ubi,
     has_cache,
@@ -37,20 +34,6 @@ INFO_KEYS = ("firmware_version_prefix", "board_type", "board_name", "build_date"
 
 ROOTFS_SECTIONS = ["fs", "rootfs"]
 FS_SECTIONS = ROOTFS_SECTIONS + ["app"]
-
-
-class FileSystem(Enum):
-    CRAMFS = CRAMFS_MAGIC
-    SQUASHFS = SQUASHFS_MAGIC.to_bytes(4, "little")
-    UBI = UBI_MAGIC  # Not a file system
-    UBIFS = UBIFS_MAGIC
-
-    @classmethod
-    def from_magic(cls, key, default=None):
-        try:
-            return cls(key)
-        except ValueError:
-            return default
 
 
 async def download(url):
@@ -118,10 +101,10 @@ def get_files_from_ubifs(binbytes):
 
 def get_files_from_ubi(fd, size, offset=0):
     fsbytes = get_fs_from_ubi(fd, size, offset)
-    fs = FileSystem.from_magic(fsbytes[:4])
-    if fs == FileSystem.UBIFS:
+    fs = FileType.from_magic(fsbytes[:4])
+    if fs == FileType.UBIFS:
         return get_files_from_ubifs(fsbytes)
-    elif fs == FileSystem.SQUASHFS:
+    elif fs == FileType.SQUASHFS:
         return get_files_from_squashfs(io.BytesIO(fsbytes))
     raise Exception("Unknown file system in UBI")
 
@@ -150,7 +133,7 @@ def get_fs_info(pak: PAK, fs_sections: list[Section]) -> list[dict[str, str]]:
     result = []
     for section in fs_sections:
         pak._fd.seek(section.start)
-        fs = FileSystem.from_magic(pak._fd.read(4))
+        fs = FileType.from_magic(pak._fd.read(4))
         result.append({
             "name": section.name,
             "type": fs.name.lower() if fs is not None else "unknown"
@@ -163,17 +146,25 @@ async def get_info_from_pak(pak: PAK):
     fs_sections = [s for s in pak.sections if s.name in FS_SECTIONS]
     app = fs_sections[-1]
     pak._fd.seek(app.start)
-    fs = FileSystem.from_magic(pak._fd.read(4))
-    if fs == FileSystem.CRAMFS:
+    fs = FileType.from_magic(pak._fd.read(4))
+    if fs == FileType.CRAMFS:
         files = await asyncio.to_thread(get_files_from_cramfs, pak._fd, app.start, False)
-    elif fs == FileSystem.UBI:
+    elif fs == FileType.UBI:
         files = await asyncio.to_thread(get_files_from_ubi, pak._fd, app.len, app.start)
-    elif fs == FileSystem.SQUASHFS:
+    elif fs == FileType.SQUASHFS:
         files = await asyncio.to_thread(get_files_from_squashfs, pak._fd, app.start, False)
     else:
         return {"error": "Unrecognized image type", "sha256": ha}
-    info = get_info_from_files(files)
-    return {**info, "filesystems": get_fs_info(pak, fs_sections), "sha256": ha}
+    uimage = get_uimage_header(pak)
+    return {
+        **get_info_from_files(files),
+        "os": "Linux" if uimage.os == 5 else "Unknown",
+        "architecture": get_arch_name(uimage.arch),
+        "kernel_image_name": uimage.name,
+        "uboot_version": get_uboot_version(pak),
+        "filesystems": get_fs_info(pak, fs_sections),
+        "sha256": ha
+    }
 
 
 async def direct_download_url(url):

@@ -54,7 +54,7 @@ provided on PyPI.
 
 ### Command line
 
-#### List
+#### Info
 
 ```
 $ reolinkfw info file_or_url
@@ -74,6 +74,10 @@ $ reolinkfw info RLC-410-5MP_20_20052300.zip -i 2
     "detail_machine_type": "IPC_51516M5M",
     "type": "IPC",
     "version_file": "20_20052300",
+    "os": "Linux",
+    "architecture": "MIPS",
+    "kernel_image_name": "Linux-4.1.0",
+    "uboot_version": "U-Boot 2014.07 (Feb 26 2019 - 18:20:07)",
     "filesystems": [
       {
         "name": "fs",

@@ -1,6 +1,7 @@
 import hashlib
 import io
 from contextlib import contextmanager
+from enum import Enum
 from functools import partial
 from os import scandir
 from pathlib import Path
@@ -9,14 +10,33 @@ from tempfile import gettempdir as _gettempdir
 from zipfile import is_zipfile
 
 from pakler import PAK, is_pak_file
+from pycramfs.const import MAGIC_BYTES as CRAMFS_MAGIC
+from PySquashfsImage.const import SQUASHFS_MAGIC
 from ubireader.ubi import ubi
+from ubireader.ubi.defines import UBI_EC_HDR_MAGIC as UBI_MAGIC
 from ubireader.ubi_io import ubi_file, leb_virtual_file
+from ubireader.ubifs.defines import UBIFS_NODE_MAGIC as UBIFS_MAGIC
 from ubireader.utils import guess_peb_size
 
 from reolinkfw.tmpfile import TempFile
 
 ONEMIB = 1024**2
 ONEGIB = 1024**3
+
+
+class FileType(Enum):
+    CRAMFS = CRAMFS_MAGIC
+    SQUASHFS = SQUASHFS_MAGIC.to_bytes(4, "little")
+    UBI = UBI_MAGIC
+    UBIFS = UBIFS_MAGIC
+    UIMAGE = 0x27051956.to_bytes(4, "big")
+
+    @classmethod
+    def from_magic(cls, key, default=None):
+        try:
+            return cls(key)
+        except ValueError:
+            return default
 
 
 class DummyLEB:
