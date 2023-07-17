@@ -134,6 +134,9 @@ def get_fs_info(pak: PAK, fs_sections: list[Section]) -> list[dict[str, str]]:
     for section in fs_sections:
         pak._fd.seek(section.start)
         fs = FileType.from_magic(pak._fd.read(4))
+        if fs == FileType.UBI:
+            pak._fd.seek(section.start + 266240)
+            fs = FileType.from_magic(pak._fd.read(4))
         result.append({
             "name": section.name,
             "type": fs.name.lower() if fs is not None else "unknown"
