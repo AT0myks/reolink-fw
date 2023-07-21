@@ -9,9 +9,12 @@ from PySquashfsImage import SquashFsImage
 from PySquashfsImage.extract import extract_dir as extract_squashfs
 from ubireader.ubifs import ubifs
 from ubireader.ubifs.output import extract_files as extract_ubifs
+from ubireader.ubi_io import ubi_file
+from ubireader.utils import guess_leb_size
 
 from reolinkfw import FS_SECTIONS, ROOTFS_SECTIONS
-from reolinkfw.util import DummyLEB, FileType, get_fs_from_ubi
+from reolinkfw.tmpfile import TempFile
+from reolinkfw.util import FileType, closing_ubifile, get_fs_from_ubi
 
 
 def extract_file_system(pak: PAK, section: Section, dest: Path = None):
@@ -23,10 +26,12 @@ def extract_file_system(pak: PAK, section: Section, dest: Path = None):
         fs_bytes = get_fs_from_ubi(pak._fd, section.len, section.start)
         fs = FileType.from_magic(fs_bytes[:4])
         if fs == FileType.UBIFS:
-            with DummyLEB.from_bytes(fs_bytes) as leb:
-                with redirect_stdout(StringIO()):
-                    # If files already exist they are not written again.
-                    extract_ubifs(ubifs(leb), dest)
+            with TempFile(fs_bytes) as file:
+                block_size = guess_leb_size(file)
+                with closing_ubifile(ubi_file(file, block_size)) as ubifile:
+                    with redirect_stdout(StringIO()):
+                        # Files that already exist are not written again.
+                        extract_ubifs(ubifs(ubifile), dest)
         elif fs == FileType.SQUASHFS:
             with SquashFsImage.from_bytes(fs_bytes) as image:
                 extract_squashfs(image.root, dest, True)

@@ -13,12 +13,11 @@ from lxml.html import document_fromstring
 from pakler import PAK, Section, is_pak_file
 from pycramfs import Cramfs
 from PySquashfsImage import SquashFsImage
-from ubireader.ubifs import ubifs, walk
-from ubireader.ubifs.output import _process_reg_file
 
+from reolinkfw.tmpfile import TempFile
+from reolinkfw.ubifs import UBIFS
 from reolinkfw.uboot import get_arch_name, get_uboot_version, get_uimage_header
 from reolinkfw.util import (
-    DummyLEB,
     FileType,
     get_cache_file,
     get_fs_from_ubi,
@@ -87,15 +86,15 @@ def get_files_from_squashfs(fd, offset=0, closefd=True):
 
 
 def get_files_from_ubifs(binbytes):
+    # For now all firmwares using ubifs have two file system sections.
+    # The interesting files are in the root directory of the "app" one.
+    # Using select() with a relative path is enough.
     files = dict.fromkeys(FILES)
-    with DummyLEB.from_bytes(binbytes) as leb:
-        image = ubifs(leb)
-        inodes = {}
-        bad_blocks = []
-        walk.index(image, image.master_node.root_lnum, image.master_node.root_offs, inodes, bad_blocks)
-        for dent in inodes[1]['dent']:
-            if dent.name in files:
-                files[dent.name] = _process_reg_file(image, inodes[dent.inum], None)
+    with TempFile(binbytes) as file:
+        with UBIFS.from_file(file) as image:
+            for name in files:
+                if (file := image.select(name)) is not None:
+                    files[name] = file.read_bytes()
     return files
 
 
