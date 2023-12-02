@@ -1,7 +1,9 @@
 import re
 from ctypes import BigEndianStructure, c_char, c_uint32, c_uint8, sizeof
 from enum import IntEnum
+from typing import BinaryIO, Optional
 
+import pybcl
 from pakler import PAK
 
 from reolinkfw.util import FileType
@@ -84,12 +86,27 @@ class LegacyImageHeader(BigEndianStructure):
         return cls.from_buffer_copy(fd.read(sizeof(cls)))
 
 
-def get_uboot_version(pak: PAK):
+def is_bcl_compressed(fd: BinaryIO) -> bool:
+    size = len(pybcl.BCL_MAGIC_BYTES)
+    magic = fd.read(size)
+    fd.seek(-size, 1)
+    return magic == pybcl.BCL_MAGIC_BYTES
+
+
+def get_uboot_version(pak: PAK) -> Optional[str]:
     for section in pak.sections:
         if section.len and "uboot" in section.name.lower():
             # This section is always named 'uboot' or 'uboot1'.
             pak._fd.seek(section.start)
-            match = re.search(b"U-Boot [0-9]{4}\.[0-9]{2}.*? \(.*?\)", pak._fd.read(section.len))
+            if is_bcl_compressed(pak._fd):
+                # Sometimes section.len - sizeof(hdr) is 1 to 3 bytes larger
+                # than hdr.size. The extra bytes are 0xff (padding?). This
+                # could explain why the compressed size is added to the header.
+                hdr = pybcl.HeaderVariant.from_fd(pak._fd)
+                data = pybcl.decompress(pak._fd.read(hdr.size), hdr.algo, hdr.outsize)
+            else:
+                data = pak._fd.read(section.len)
+            match = re.search(b"U-Boot [0-9]{4}\.[0-9]{2}.*? \(.*?\)", data)
             return match.group().decode() if match is not None else None
     return None
 
