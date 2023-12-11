@@ -2,12 +2,14 @@ import asyncio
 import io
 import posixpath
 import re
+from collections.abc import Iterable, Mapping
 from pathlib import Path
-from typing import Optional
+from typing import IO, Any, BinaryIO, Optional, Union
 from urllib.parse import parse_qsl, urlparse
 from zipfile import ZipFile, is_zipfile
 
 import aiohttp
+from aiohttp.typedefs import StrOrURL
 from lxml.etree import fromstring
 from lxml.html import document_fromstring
 from pakler import PAK, Section, is_pak_file
@@ -15,6 +17,7 @@ from pycramfs import Cramfs
 from PySquashfsImage import SquashFsImage
 
 from reolinkfw.tmpfile import TempFile
+from reolinkfw.typedefs import Buffer, Files, StrPath, StrPathURL
 from reolinkfw.ubifs import UBIFS
 from reolinkfw.uboot import get_arch_name, get_uboot_version, get_uimage_header
 from reolinkfw.util import (
@@ -35,7 +38,7 @@ ROOTFS_SECTIONS = ["fs", "rootfs"]
 FS_SECTIONS = ROOTFS_SECTIONS + ["app"]
 
 
-async def download(url):
+async def download(url: StrOrURL) -> Union[bytes, int]:
     """Return resource as bytes.
 
     Return the status code of the request if it is not 200.
@@ -45,7 +48,7 @@ async def download(url):
             return await resp.read() if resp.status == 200 else resp.status
 
 
-def extract_paks(zip) -> list[tuple[str, PAK]]:
+def extract_paks(zip: Union[StrPath, IO[bytes]]) -> list[tuple[str, PAK]]:
     """Return a list of tuples, one for each PAK file found in the ZIP.
 
     It is the caller's responsibility to close the PAK files.
@@ -61,8 +64,8 @@ def extract_paks(zip) -> list[tuple[str, PAK]]:
     return paks
 
 
-def get_info_from_files(files):
-    xml = dict(fromstring(files["dvr.xml"]).items())
+def get_info_from_files(files: Mapping[Files, Optional[bytes]]) -> dict[str, Optional[str]]:
+    xml: dict[str, str] = dict(fromstring(files["dvr.xml"]).items())
     info = {k: xml.get(k) for k in INFO_KEYS}
     info["version_file"] = files["version_file"].decode().strip()
     if not info.get("firmware_version_prefix"):
@@ -72,7 +75,7 @@ def get_info_from_files(files):
     return info
 
 
-def get_files_from_squashfs(fd, offset=0, closefd=True):
+def get_files_from_squashfs(fd: BinaryIO, offset: int = 0, closefd: bool = True) -> dict[Files, Optional[bytes]]:
     # Firmwares using squashfs have either one or two file system
     # sections. When there is only one, the app directory is located at
     # /mnt/app. Otherwise it's the same as with cramfs and ubifs.
@@ -85,7 +88,7 @@ def get_files_from_squashfs(fd, offset=0, closefd=True):
     return files
 
 
-def get_files_from_ubifs(binbytes):
+def get_files_from_ubifs(binbytes: Buffer) -> dict[Files, Optional[bytes]]:
     # For now all firmwares using ubifs have two file system sections.
     # The interesting files are in the root directory of the "app" one.
     # Using select() with a relative path is enough.
@@ -98,7 +101,7 @@ def get_files_from_ubifs(binbytes):
     return files
 
 
-def get_files_from_ubi(fd, size, offset=0):
+def get_files_from_ubi(fd: BinaryIO, size: int, offset: int = 0) -> dict[Files, Optional[bytes]]:
     fsbytes = get_fs_from_ubi(fd, size, offset)
     fs = FileType.from_magic(fsbytes[:4])
     if fs == FileType.UBIFS:
@@ -108,7 +111,7 @@ def get_files_from_ubi(fd, size, offset=0):
     raise Exception("Unknown file system in UBI")
 
 
-def get_files_from_cramfs(fd, offset=0, closefd=True):
+def get_files_from_cramfs(fd: BinaryIO, offset: int = 0, closefd: bool = True) -> dict[Files, Optional[bytes]]:
     # For now all firmwares using cramfs have two file system sections.
     # The interesting files are in the root directory of the "app" one.
     # Using select() with a relative path is enough.
@@ -120,15 +123,15 @@ def get_files_from_cramfs(fd, offset=0, closefd=True):
     return files
 
 
-def is_url(string):
+def is_url(string: StrOrURL) -> bool:
     return str(string).startswith("http")
 
 
-def is_local_file(string):
+def is_local_file(string: StrPath) -> bool:
     return Path(string).is_file()
 
 
-def get_fs_info(pak: PAK, fs_sections: list[Section]) -> list[dict[str, str]]:
+def get_fs_info(pak: PAK, fs_sections: Iterable[Section]) -> list[dict[str, str]]:
     result = []
     for section in fs_sections:
         pak._fd.seek(section.start)
@@ -143,7 +146,7 @@ def get_fs_info(pak: PAK, fs_sections: list[Section]) -> list[dict[str, str]]:
     return result
 
 
-async def get_info_from_pak(pak: PAK):
+async def get_info_from_pak(pak: PAK) -> dict[str, Any]:
     ha = await asyncio.to_thread(sha256_pak, pak)
     fs_sections = [s for s in pak.sections if s.name in FS_SECTIONS]
     app = fs_sections[-1]
@@ -169,7 +172,7 @@ async def get_info_from_pak(pak: PAK):
     }
 
 
-async def direct_download_url(url):
+async def direct_download_url(url: str) -> str:
     if url.startswith("https://drive.google.com/file/d/"):
         return f"https://drive.google.com/uc?id={url.split('/')[5]}&confirm=t"
     elif url.startswith("https://www.mediafire.com/file/"):
@@ -182,7 +185,7 @@ async def direct_download_url(url):
     return url
 
 
-async def get_paks(file_or_url, use_cache: bool = True) -> list[tuple[Optional[str], PAK]]:
+async def get_paks(file_or_url: StrPathURL, use_cache: bool = True) -> list[tuple[Optional[str], PAK]]:
     """Return PAK files read from an on-disk file or a URL.
 
     The file or resource may be a ZIP or a PAK. On success return a
@@ -191,6 +194,7 @@ async def get_paks(file_or_url, use_cache: bool = True) -> list[tuple[Optional[s
     be None. If the file is a ZIP the list might be empty.
     It is the caller's responsibility to close the PAK files.
     """
+    file_or_url = str(file_or_url)
     if is_url(file_or_url):
         if use_cache and has_cache(file_or_url):
             return await get_paks(get_cache_file(file_or_url))
@@ -219,7 +223,7 @@ async def get_paks(file_or_url, use_cache: bool = True) -> list[tuple[Optional[s
     raise Exception("Not a URL or file")
 
 
-async def get_info(file_or_url, use_cache: bool = True):
+async def get_info(file_or_url: StrPathURL, use_cache: bool = True) -> list[dict[str, Any]]:
     """Retrieve firmware info from an on-disk file or a URL.
 
     The file or resource may be a ZIP or a PAK.

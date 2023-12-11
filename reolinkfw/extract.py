@@ -1,6 +1,7 @@
 from contextlib import redirect_stdout
 from io import StringIO
 from pathlib import Path
+from typing import Optional
 
 from pakler import PAK, Section
 from pycramfs import Cramfs
@@ -17,7 +18,7 @@ from reolinkfw.tmpfile import TempFile
 from reolinkfw.util import FileType, closing_ubifile, get_fs_from_ubi
 
 
-def extract_file_system(pak: PAK, section: Section, dest: Path = None):
+def extract_file_system(pak: PAK, section: Section, dest: Optional[Path] = None) -> None:
     dest = (Path.cwd() / "reolink_fs") if dest is None else dest
     dest.mkdir(parents=True, exist_ok=True)
     pak._fd.seek(section.start)
@@ -47,7 +48,7 @@ def extract_file_system(pak: PAK, section: Section, dest: Path = None):
         raise Exception("Unknown file system")
 
 
-def extract_pak(pak: PAK, dest: Path = None, force: bool = False):
+def extract_pak(pak: PAK, dest: Optional[Path] = None, force: bool = False) -> None:
     dest = (Path.cwd() / "reolink_firmware") if dest is None else dest
     dest.mkdir(parents=True, exist_ok=force)
     rootfsdir = [s.name for s in pak.sections if s.name in ROOTFS_SECTIONS][0]

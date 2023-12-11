@@ -55,7 +55,7 @@ async def extract(args: Namespace) -> None:
         pakfile.close()
 
 
-def main():
+def main() -> None:
     parser = ArgumentParser(description="Extract information and files from Reolink firmwares")
     parser.add_argument("-V", "--version", action="version", version=f"%(prog)s {__version__}")
     subparsers = parser.add_subparsers(required=True)

@@ -1,4 +1,7 @@
+from __future__ import annotations
+
 import hashlib
+from collections.abc import Generator
 from contextlib import contextmanager
 from enum import Enum
 from functools import partial
@@ -6,6 +9,7 @@ from os import scandir
 from pathlib import Path
 from shutil import disk_usage
 from tempfile import gettempdir as _gettempdir
+from typing import Any, AnyStr, BinaryIO, Optional, Union
 from zipfile import is_zipfile
 
 from pakler import PAK, is_pak_file
@@ -18,6 +22,7 @@ from ubireader.ubifs.defines import UBIFS_NODE_MAGIC as UBIFS_MAGIC
 from ubireader.utils import guess_peb_size
 
 from reolinkfw.tmpfile import TempFile
+from reolinkfw.typedefs import Buffer, GenericPath
 
 ONEMIB = 1024**2
 ONEGIB = 1024**3
@@ -31,7 +36,7 @@ class FileType(Enum):
     UIMAGE = 0x27051956.to_bytes(4, "big")
 
     @classmethod
-    def from_magic(cls, key, default=None):
+    def from_magic(cls, key: bytes, default: Optional[Any] = None) -> Optional[FileType]:
         try:
             return cls(key)
         except ValueError:
@@ -39,14 +44,14 @@ class FileType(Enum):
 
 
 @contextmanager
-def closing_ubifile(ubifile):
+def closing_ubifile(ubifile: ubi_file) -> Generator[ubi_file, Any, None]:
     try:
         yield ubifile
     finally:
         ubifile._fhandle.close()
 
 
-def get_fs_from_ubi(fd, size, offset=0) -> bytes:
+def get_fs_from_ubi(fd: BinaryIO, size: int, offset: int = 0) -> bytes:
     """Return the first file system that sits on top of the UBI volume."""
     fd.seek(offset)
     binbytes = fd.read(size)
@@ -66,7 +71,7 @@ def sha256_pak(pak: PAK) -> str:
     return sha.hexdigest()
 
 
-def dir_size(path):
+def dir_size(path: Union[GenericPath[AnyStr], int, None] = None) -> int:
     size = 0
     try:
         with scandir(path) as it:
@@ -99,7 +104,7 @@ def has_cache(url: str) -> bool:
     return get_cache_file(url).is_file()
 
 
-def make_cache_file(url: str, filebytes, name=None) -> bool:
+def make_cache_file(url: str, filebytes: Buffer, name: Optional[str] = None) -> bool:
     tempdir = gettempdir()
     tempdir.mkdir(exist_ok=True)
     if disk_usage(tempdir).free < ONEGIB or dir_size(tempdir) > ONEGIB:

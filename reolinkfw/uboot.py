@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import re
 from ctypes import BigEndianStructure, c_char, c_uint32, c_uint8, sizeof
 from enum import IntEnum
@@ -32,6 +34,19 @@ class LegacyImageHeader(BigEndianStructure):
         ("_comp", c_uint8),
         ("_name", c_char * 32),
     ]
+
+    _magic: int
+    _hcrc: int
+    _time: int
+    _size: int
+    _load: int
+    _ep: int
+    _dcrc: int
+    _os: int
+    _arch: int
+    _type: int
+    _comp: int
+    _name: bytes
 
     @property
     def magic(self) -> int:
@@ -82,7 +97,7 @@ class LegacyImageHeader(BigEndianStructure):
         return self._name.decode()
 
     @classmethod
-    def from_fd(cls, fd):
+    def from_fd(cls, fd: BinaryIO) -> LegacyImageHeader:
         return cls.from_buffer_copy(fd.read(sizeof(cls)))
 
 

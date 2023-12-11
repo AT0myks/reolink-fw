@@ -1,8 +1,9 @@
 from __future__ import annotations
 
+from collections.abc import Mapping
 from pathlib import PurePosixPath
 from stat import filemode
-from typing import Iterator, Literal, Optional
+from typing import Any, Iterator, Literal, Optional
 
 from ubireader.ubifs import ubifs, walk
 from ubireader.ubifs.defines import (
@@ -25,11 +26,12 @@ from ubireader.ubi_io import ubi_file
 from ubireader.utils import guess_leb_size
 
 from reolinkfw.tmpfile import TempFile
+from reolinkfw.typedefs import Buffer, FileDescriptorOrPath, StrPath
 
 
 class File:
 
-    def __init__(self, image: UBIFS, nodes: dict, name: str = '', parent: Optional[Directory] = None) -> None:
+    def __init__(self, image: UBIFS, nodes: Mapping[str, Any], name: str = '', parent: Optional[Directory] = None) -> None:
         self._image = image
         self._nodes = nodes
         self._name = name
@@ -108,9 +110,9 @@ class Symlink(DataFile):
 
 class Directory(File):
 
-    def __init__(self, image: UBIFS, nodes: dict, name: str = '', parent: Optional[Directory] = None) -> None:
+    def __init__(self, image: UBIFS, nodes: Mapping[str, Any], name: str = '', parent: Optional[Directory] = None) -> None:
         super().__init__(image, nodes, name, parent)
-        self._children = {}
+        self._children: dict[str, File] = {}
         for dent in nodes.get("dent", []):
             cls = filetype[dent.type]
             self._children[dent.name] = cls(image, image.inodes[dent.inum], dent.name, self)
@@ -126,7 +128,7 @@ class Directory(File):
     def children(self) -> dict[str, File]:
         return self._children
 
-    def select(self, path) -> Optional[File]:
+    def select(self, path: StrPath) -> Optional[File]:
         """Select a file of any kind by path.
 
         The path can be absolute or relative.
@@ -163,7 +165,7 @@ class UBIFS:
 
     def __init__(self, ubifs: ubifs) -> None:
         self._ubifs = ubifs
-        self._inodes = {}
+        self._inodes: dict[int, dict[str, Any]] = {}
         self._bad_blocks = []
         walk.index(ubifs, ubifs.master_node.root_lnum, ubifs.master_node.root_offs, self._inodes, self._bad_blocks)
         self._root = Directory(self, self._inodes[UBIFS_ROOT_INO])
@@ -178,7 +180,7 @@ class UBIFS:
         yield from self._root.riter()
 
     @property
-    def inodes(self) -> dict:
+    def inodes(self) -> dict[int, dict[str, Any]]:
         return self._inodes
 
     @property
@@ -188,15 +190,15 @@ class UBIFS:
     def close(self) -> None:
         self._ubifs._file._fhandle.close()
 
-    def select(self, path) -> Optional[File]:
+    def select(self, path: StrPath) -> Optional[File]:
         return self._root.select(path)
 
     @classmethod
-    def from_file(cls, path) -> UBIFS:
+    def from_file(cls, path: FileDescriptorOrPath) -> UBIFS:
         return cls(ubifs(ubi_file(path, guess_leb_size(path))))
 
     @classmethod
-    def from_bytes(cls, bytes_, offset: int = 0) -> UBIFS:
+    def from_bytes(cls, bytes_: Buffer, offset: int = 0) -> UBIFS:
         chdr = common_hdr(bytes_[offset:offset+UBIFS_COMMON_HDR_SZ])
         if chdr.magic != int.from_bytes(UBIFS_NODE_MAGIC, "little") or chdr.node_type != UBIFS_SB_NODE:
             raise Exception("Not UBIFS")
