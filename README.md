@@ -161,7 +161,7 @@ print(get_info(url))
 file = "/home/ben/RLC-410-5MP_20_20052300.zip"
 print(get_info(file))
 with ReolinkFirmware.from_file(file) as fw:
-    fw.extract_pak()
+    fw.extract()
 ```
 
 In most cases where a URL is used, it will be a direct link to the file
