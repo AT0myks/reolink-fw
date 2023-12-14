@@ -5,12 +5,11 @@ import io
 from collections.abc import Callable, Generator
 from contextlib import contextmanager
 from enum import Enum
-from functools import partial
 from os import scandir
 from pathlib import Path
 from shutil import disk_usage
 from tempfile import gettempdir as _gettempdir
-from typing import TYPE_CHECKING, Any, AnyStr, BinaryIO, Optional, Union
+from typing import Any, AnyStr, BinaryIO, Optional, Union
 from zipfile import is_zipfile
 
 from pakler import Section, is_pak_file
@@ -22,8 +21,6 @@ from ubireader.ubi_io import ubi_file
 from ubireader.ubifs.defines import UBIFS_NODE_MAGIC as UBIFS_MAGIC
 from ubireader.utils import guess_peb_size
 
-if TYPE_CHECKING:
-    from reolinkfw import ReolinkFirmware
 from reolinkfw.tmpfile import TempFile
 from reolinkfw.typedefs import Buffer, GenericPath
 
@@ -130,14 +127,6 @@ def get_fs_from_ubi(fd: BinaryIO, size: int, offset: int = 0) -> bytes:
             ubi_obj = ubi(ubifile)
             volume = ubi_obj.images[0].volumes.popitem()[1]
             return b''.join(volume.reader(ubi_obj))
-
-
-def sha256_pak(fw: ReolinkFirmware) -> str:
-    sha = hashlib.sha256()
-    fw._fd.seek(0)
-    for block in iter(partial(fw._fd.read, ONEMIB), b''):
-        sha.update(block)
-    return sha.hexdigest()
 
 
 def dir_size(path: Union[GenericPath[AnyStr], int, None] = None) -> int:

@@ -8,8 +8,6 @@ from datetime import datetime
 from pathlib import Path, PurePath
 
 from reolinkfw import __version__, get_info, get_paks
-from reolinkfw.extract import extract_pak
-from reolinkfw.util import sha256_pak
 
 HW_FIELDS = ("board_type", "detail_machine_type", "board_name")
 
@@ -50,8 +48,8 @@ async def extract(args: Namespace) -> None:
         raise Exception("No PAKs found in ZIP file")
     dest = Path.cwd() if args.dest is None else args.dest
     for pakname, pakfile in paks:
-        name = sha256_pak(pakfile) if pakname is None else PurePath(pakname).stem
-        await asyncio.to_thread(extract_pak, pakfile, dest / name, args.force)
+        name = pakfile.sha256() if pakname is None else PurePath(pakname).stem
+        await asyncio.to_thread(pakfile.extract_pak, dest / name, args.force)
         pakfile.close()
 
 

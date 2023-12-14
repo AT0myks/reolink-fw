@@ -1,15 +1,8 @@
 from __future__ import annotations
 
-import re
 from ctypes import BigEndianStructure, c_char, c_uint32, c_uint8, sizeof
 from enum import IntEnum
-from typing import TYPE_CHECKING, BinaryIO, Optional
-
-import pybcl
-
-if TYPE_CHECKING:
-    from reolinkfw import ReolinkFirmware
-from reolinkfw.util import FileType
+from typing import BinaryIO
 
 UBOOT_MAGIC = 0x27051956
 
@@ -100,33 +93,6 @@ class LegacyImageHeader(BigEndianStructure):
     @classmethod
     def from_fd(cls, fd: BinaryIO) -> LegacyImageHeader:
         return cls.from_buffer_copy(fd.read(sizeof(cls)))
-
-
-def get_uboot_version(fw: ReolinkFirmware) -> Optional[str]:
-    for section in fw:
-        if section.len and "uboot" in section.name.lower():
-            # This section is always named 'uboot' or 'uboot1'.
-            with fw.open(section) as f:
-                if f.peek(len(pybcl.BCL_MAGIC_BYTES)) == pybcl.BCL_MAGIC_BYTES:
-                    # Sometimes section.len - sizeof(hdr) is 1 to 3 bytes larger
-                    # than hdr.size. The extra bytes are 0xff (padding?). This
-                    # could explain why the compressed size is added to the header.
-                    hdr = pybcl.HeaderVariant.from_fd(f)
-                    data = pybcl.decompress(f.read(hdr.size), hdr.algo, hdr.outsize)
-                else:
-                    data = f.read(section.len)
-            match = re.search(b"U-Boot [0-9]{4}\.[0-9]{2}.*? \(.*?\)", data)
-            return match.group().decode() if match is not None else None
-    return None
-
-
-def get_uimage_header(fw: ReolinkFirmware) -> LegacyImageHeader:
-    for section in fw:
-        with fw.open(section) as f:
-            if section.len and FileType.from_magic(f.peek(4)) == FileType.UIMAGE:
-                # This section is always named 'KERNEL' or 'kernel'.
-                return LegacyImageHeader.from_fd(f)
-    raise Exception("No kernel section found")
 
 
 def get_arch_name(arch: Arch) -> str:

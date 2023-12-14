@@ -155,14 +155,13 @@ You should not use it to repack a custom firmware.
 
 ```py
 from reolinkfw import ReolinkFirmware, get_info
-from reolinkfw.extract import extract_pak
 
 url = "https://reolink-storage.s3.amazonaws.com/website/firmware/20200523firmware/RLC-410-5MP_20_20052300.zip"
 print(get_info(url))
 file = "/home/ben/RLC-410-5MP_20_20052300.zip"
 print(get_info(file))
 with ReolinkFirmware.from_file(file) as fw:
-    extract_pak(fw)
+    fw.extract_pak()
 ```
 
 In most cases where a URL is used, it will be a direct link to the file
