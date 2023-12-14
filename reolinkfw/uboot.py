@@ -3,11 +3,12 @@ from __future__ import annotations
 import re
 from ctypes import BigEndianStructure, c_char, c_uint32, c_uint8, sizeof
 from enum import IntEnum
-from typing import BinaryIO, Optional
+from typing import TYPE_CHECKING, BinaryIO, Optional
 
 import pybcl
-from pakler import PAK
 
+if TYPE_CHECKING:
+    from reolinkfw import ReolinkFirmware
 from reolinkfw.util import FileType
 
 UBOOT_MAGIC = 0x27051956
@@ -101,38 +102,30 @@ class LegacyImageHeader(BigEndianStructure):
         return cls.from_buffer_copy(fd.read(sizeof(cls)))
 
 
-def is_bcl_compressed(fd: BinaryIO) -> bool:
-    size = len(pybcl.BCL_MAGIC_BYTES)
-    magic = fd.read(size)
-    fd.seek(-size, 1)
-    return magic == pybcl.BCL_MAGIC_BYTES
-
-
-def get_uboot_version(pak: PAK) -> Optional[str]:
-    for section in pak.sections:
+def get_uboot_version(fw: ReolinkFirmware) -> Optional[str]:
+    for section in fw:
         if section.len and "uboot" in section.name.lower():
             # This section is always named 'uboot' or 'uboot1'.
-            pak._fd.seek(section.start)
-            if is_bcl_compressed(pak._fd):
-                # Sometimes section.len - sizeof(hdr) is 1 to 3 bytes larger
-                # than hdr.size. The extra bytes are 0xff (padding?). This
-                # could explain why the compressed size is added to the header.
-                hdr = pybcl.HeaderVariant.from_fd(pak._fd)
-                data = pybcl.decompress(pak._fd.read(hdr.size), hdr.algo, hdr.outsize)
-            else:
-                data = pak._fd.read(section.len)
+            with fw.open(section) as f:
+                if f.peek(len(pybcl.BCL_MAGIC_BYTES)) == pybcl.BCL_MAGIC_BYTES:
+                    # Sometimes section.len - sizeof(hdr) is 1 to 3 bytes larger
+                    # than hdr.size. The extra bytes are 0xff (padding?). This
+                    # could explain why the compressed size is added to the header.
+                    hdr = pybcl.HeaderVariant.from_fd(f)
+                    data = pybcl.decompress(f.read(hdr.size), hdr.algo, hdr.outsize)
+                else:
+                    data = f.read(section.len)
             match = re.search(b"U-Boot [0-9]{4}\.[0-9]{2}.*? \(.*?\)", data)
             return match.group().decode() if match is not None else None
     return None
 
 
-def get_uimage_header(pak: PAK) -> LegacyImageHeader:
-    for section in pak.sections:
-        pak._fd.seek(section.start)
-        if section.len and FileType.from_magic(pak._fd.read(4)) == FileType.UIMAGE:
-            # This section is always named 'KERNEL' or 'kernel'.
-            pak._fd.seek(section.start)
-            return LegacyImageHeader.from_fd(pak._fd)
+def get_uimage_header(fw: ReolinkFirmware) -> LegacyImageHeader:
+    for section in fw:
+        with fw.open(section) as f:
+            if section.len and FileType.from_magic(f.peek(4)) == FileType.UIMAGE:
+                # This section is always named 'KERNEL' or 'kernel'.
+                return LegacyImageHeader.from_fd(f)
     raise Exception("No kernel section found")
 
 

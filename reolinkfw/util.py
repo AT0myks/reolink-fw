@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 import hashlib
-from collections.abc import Generator
+import io
+from collections.abc import Callable, Generator
 from contextlib import contextmanager
 from enum import Enum
 from functools import partial
@@ -9,10 +10,10 @@ from os import scandir
 from pathlib import Path
 from shutil import disk_usage
 from tempfile import gettempdir as _gettempdir
-from typing import Any, AnyStr, BinaryIO, Optional, Union
+from typing import TYPE_CHECKING, Any, AnyStr, BinaryIO, Optional, Union
 from zipfile import is_zipfile
 
-from pakler import PAK, is_pak_file
+from pakler import Section, is_pak_file
 from pycramfs.const import MAGIC_BYTES as CRAMFS_MAGIC
 from PySquashfsImage.const import SQUASHFS_MAGIC
 from ubireader.ubi import ubi
@@ -21,6 +22,8 @@ from ubireader.ubi_io import ubi_file
 from ubireader.ubifs.defines import UBIFS_NODE_MAGIC as UBIFS_MAGIC
 from ubireader.utils import guess_peb_size
 
+if TYPE_CHECKING:
+    from reolinkfw import ReolinkFirmware
 from reolinkfw.tmpfile import TempFile
 from reolinkfw.typedefs import Buffer, GenericPath
 
@@ -43,6 +46,72 @@ class FileType(Enum):
             return default
 
 
+class SectionFile(io.BufferedIOBase):
+
+    def __init__(self, fd: BinaryIO, section: Section, close: Callable[[BinaryIO], None]) -> None:
+        self._fd = fd
+        self._close = close
+        self._start = section.start
+        self._end = section.start + section.len
+        self._position = section.start
+
+    def peek(self, size: int = 0, /) -> bytes:
+        if self._fd is None:
+            raise ValueError("peek from closed file")
+        if not isinstance(size, int):
+            raise ValueError("size must be an int")
+        if self._position >= self._end or size == 0:
+            return b''
+        max_read = self._end - self._position
+        if size < 0 or size > max_read:
+            size = max_read
+        self._fd.seek(self._position)
+        data = self._fd.read(size)
+        return data
+
+    def read(self, size: Optional[int] = -1, /) -> bytes:
+        if self._fd is None:
+            raise ValueError("read from closed file")
+        if self._position >= self._end or size == 0:
+            return b''
+        max_read = self._end - self._position
+        if size is None or size < 0 or size > max_read:
+            size = max_read
+        self._fd.seek(self._position)
+        data = self._fd.read(size)
+        self._position = self._fd.tell()
+        return data
+
+    def seek(self, offset: int, whence: int = io.SEEK_SET, /) -> int:
+        if self._fd is None:
+            raise ValueError("seek on closed file")
+        if whence == io.SEEK_SET:
+            newpos = self._start + offset
+        elif whence == io.SEEK_CUR:
+            newpos = self._position + offset
+        elif whence == io.SEEK_END:
+            newpos = self._end + offset
+        else:
+            raise ValueError(f"whence value {whence} unsupported")
+        if newpos < self._start:
+            raise ValueError("new position is negative")
+        self._position = newpos
+        return self.tell()
+
+    def tell(self) -> int:
+        if self._fd is None:
+            raise ValueError("tell on closed file")
+        return self._position - self._start
+
+    def close(self) -> None:
+        try:
+            if self._fd is not None:
+                self._close(self._fd)
+                self._fd = None
+        finally:
+            super().close()
+
+
 @contextmanager
 def closing_ubifile(ubifile: ubi_file) -> Generator[ubi_file, Any, None]:
     try:
@@ -63,10 +132,10 @@ def get_fs_from_ubi(fd: BinaryIO, size: int, offset: int = 0) -> bytes:
             return b''.join(volume.reader(ubi_obj))
 
 
-def sha256_pak(pak: PAK) -> str:
+def sha256_pak(fw: ReolinkFirmware) -> str:
     sha = hashlib.sha256()
-    pak._fd.seek(0)
-    for block in iter(partial(pak._fd.read, ONEMIB), b''):
+    fw._fd.seek(0)
+    for block in iter(partial(fw._fd.read, ONEMIB), b''):
         sha.update(block)
     return sha.hexdigest()
 
