@@ -82,6 +82,8 @@ Architecture:         MIPS
 OS:                   Linux
 Kernel image name:    Linux-4.1.0
 U-Boot version:       U-Boot 2014.07 (Feb 26 2019 - 18:20:07)
+U-Boot compiler:      mipsel-24kec-linux-uclibc-gcc.br_real (Buildroot 2015.11.1-00003-gfd1edb1) 4.9.3
+U-Boot linker:        GNU ld (GNU Binutils) 2.24
 File system:          squashfs
 File system sections: fs
 ```
@@ -104,6 +106,8 @@ $ reolinkfw info RLC-410-5MP_20_20052300.zip -j 2
     "architecture": "MIPS",
     "kernel_image_name": "Linux-4.1.0",
     "uboot_version": "U-Boot 2014.07 (Feb 26 2019 - 18:20:07)",
+    "uboot_compiler": "mipsel-24kec-linux-uclibc-gcc.br_real (Buildroot 2015.11.1-00003-gfd1edb1) 4.9.3",
+    "uboot_linker": "GNU ld (GNU Binutils) 2.24",
     "filesystems": [
       {
         "name": "fs",

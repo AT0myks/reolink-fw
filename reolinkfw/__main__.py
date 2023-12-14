@@ -33,6 +33,8 @@ async def info(args: Namespace) -> None:
             print(f"{'OS:':{width}}", info.os)
             print(f"{'Kernel image name:':{width}}", info.kernel_image_name)
             print(f"{'U-Boot version:':{width}}", info.uboot_version or "Unknown")
+            print(f"{'U-Boot compiler:':{width}}", info.uboot_compiler or "Unknown")
+            print(f"{'U-Boot linker:':{width}}", info.uboot_linker or "Unknown")
             print(f"{'File system:':{width}}", ', '.join(sorted(fs_types)))
             print(f"{'File system sections:':{width}}", ', '.join(fs_names))
             if idx != len(pak_infos) - 1:

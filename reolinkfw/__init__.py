@@ -1,10 +1,12 @@
 import asyncio
 import hashlib
 import io
+import lzma
 import posixpath
 import re
 from collections.abc import Iterator, Mapping
 from contextlib import redirect_stdout
+from ctypes import sizeof
 from functools import partial
 from pathlib import Path
 from typing import IO, Any, BinaryIO, Optional, Union
@@ -29,7 +31,7 @@ from ubireader.utils import guess_leb_size
 from reolinkfw.tmpfile import TempFile
 from reolinkfw.typedefs import Buffer, Files, StrPath, StrPathURL
 from reolinkfw.ubifs import UBIFS
-from reolinkfw.uboot import LegacyImageHeader, get_arch_name
+from reolinkfw.uboot import Compression, LegacyImageHeader, get_arch_name
 from reolinkfw.util import (
     ONEMIB,
     FileType,
@@ -51,12 +53,22 @@ KERNEL_SECTIONS = ("kernel", "KERNEL")
 ROOTFS_SECTIONS = ("fs", "rootfs")
 FS_SECTIONS = ROOTFS_SECTIONS + ("app",)
 
+RE_COMPLINK = re.compile(b"\x00([^\x00]+?-linux-.+? \(.+?\) [0-9].+?)\n\x00+(.+?)\n\x00")
+# Pattern for a legacy image header with these properties:
+# OS: U-Boot / firmware (0x11)
+# Type: kernel (0x02)
+# Only used for MStar/SigmaStar cameras (Lumus and RLC-410W IPC_30K128M4MP)
+RE_MSTAR = re.compile(FileType.UIMAGE.value + b".{24}\x11.\x02.{33}", re.DOTALL)
+RE_UBOOT = re.compile(b"U-Boot [0-9]{4}\.[0-9]{2}.*? \(.+?\)")
+
 
 class ReolinkFirmware(PAK):
 
     def __init__(self, fd: BinaryIO, offset: int = 0, closefd: bool = True) -> None:
         super().__init__(fd, offset, closefd)
         self._uboot_section_name = self._get_uboot_section_name()
+        self._uboot_section = None
+        self._uboot = None
         self._kernel_section_name = self._get_kernel_section_name()
         self._sdict = {s.name: s for s in self}
         self._open_files = 1
@@ -79,6 +91,26 @@ class ReolinkFirmware(PAK):
     def __iter__(self) -> Iterator[Section]:
         yield from self.sections
 
+    @property
+    def uboot_section(self) -> bytes:
+        """Return the firmware's U-Boot section as bytes."""
+        if self._uboot_section is not None:
+            return self._uboot_section
+        self._uboot_section = self.extract_section(self["uboot"])
+        return self._uboot_section
+
+    @property
+    def uboot(self) -> bytes:
+        """Return the firmware's decompressed U-Boot as bytes.
+
+        If the U-Boot is not compressed this gives the same result
+        as the `uboot_section` property.
+        """
+        if self._uboot is not None:
+            return self._uboot
+        self._uboot = self._decompress_uboot()
+        return self._uboot
+
     def _fdclose(self, fd: BinaryIO) -> None:
         self._open_files -= 1
         if self._closefd and not self._open_files:
@@ -96,6 +128,23 @@ class ReolinkFirmware(PAK):
                 return section.name
         raise Exception("Kernel section not found")
 
+    def _decompress_uboot(self) -> bytes:
+        uboot = self.uboot_section
+        if uboot.startswith(pybcl.BCL_MAGIC_BYTES):
+            # Sometimes section.len - sizeof(hdr) is 1 to 3 bytes larger
+            # than hdr.size. The extra bytes are 0xff (padding?). This
+            # could explain why the compressed size is added to the header.
+            hdr = pybcl.HeaderVariant.from_buffer_copy(uboot)
+            compressed = uboot[sizeof(hdr):sizeof(hdr)+hdr.size]
+            return pybcl.decompress(compressed, hdr.algo, hdr.outsize)
+        if (match := RE_MSTAR.search(uboot)) is not None:
+            hdr = LegacyImageHeader.from_buffer_copy(uboot, match.start())
+            start = match.start() + sizeof(hdr)
+            if hdr.comp == Compression.LZMA:
+                return lzma.decompress(uboot[start:start+hdr.size])
+            raise Exception(f"Unexpected compression {hdr.comp}")
+        return uboot  # Assume no compression
+
     def open(self, section: Section) -> SectionFile:
         self._open_files += 1
         return SectionFile(self._fd, section, self._fdclose)
@@ -112,22 +161,15 @@ class ReolinkFirmware(PAK):
             sha.update(block)
         return sha.hexdigest()
 
-    def get_uboot_version(self) -> Optional[str]:
-        for section in self:
-            if section.len and "uboot" in section.name.lower():
-                # This section is always named 'uboot' or 'uboot1'.
-                with self.open(section) as f:
-                    if f.peek(len(pybcl.BCL_MAGIC_BYTES)) == pybcl.BCL_MAGIC_BYTES:
-                        # Sometimes section.len - sizeof(hdr) is 1 to 3 bytes larger
-                        # than hdr.size. The extra bytes are 0xff (padding?). This
-                        # could explain why the compressed size is added to the header.
-                        hdr = pybcl.HeaderVariant.from_fd(f)
-                        data = pybcl.decompress(f.read(hdr.size), hdr.algo, hdr.outsize)
-                    else:
-                        data = f.read(section.len)
-                match = re.search(b"U-Boot [0-9]{4}\.[0-9]{2}.*? \(.*?\)", data)
-                return match.group().decode() if match is not None else None
-        return None
+    def get_uboot_info(self) -> tuple[Optional[str], Optional[str], Optional[str]]:
+        # Should never be None.
+        match_ub = RE_UBOOT.search(self.uboot)
+        version = match_ub.group().decode() if match_ub is not None else None
+        # Should only be None for HiSilicon devices.
+        match_cl = RE_COMPLINK.search(self.uboot)
+        compiler = match_cl.group(1).decode() if match_cl is not None else None
+        linker = match_cl.group(2).decode() if match_cl is not None else None
+        return version, compiler, linker
 
     def get_uimage_header(self) -> LegacyImageHeader:
         for section in self:
@@ -165,12 +207,15 @@ class ReolinkFirmware(PAK):
             else:
                 return {"error": "Unrecognized image type", "sha256": ha}
         uimage = self.get_uimage_header()
+        uboot_version, compiler, linker = self.get_uboot_info()
         return {
             **get_info_from_files(files),
             "os": "Linux" if uimage.os == 5 else "Unknown",
             "architecture": get_arch_name(uimage.arch),
             "kernel_image_name": uimage.name,
-            "uboot_version": self.get_uboot_version(),
+            "uboot_version": uboot_version,
+            "uboot_compiler": compiler,
+            "uboot_linker": linker,
             "filesystems": self.get_fs_info(),
             "sha256": ha
         }
@@ -208,13 +253,15 @@ class ReolinkFirmware(PAK):
         dest = (Path.cwd() / "reolink_firmware") if dest is None else dest
         dest.mkdir(parents=True, exist_ok=force)
         rootfsdir = [s.name for s in self if s.name in ROOTFS_SECTIONS][0]
-        for section in self:
-            if section.name in FS_SECTIONS:
-                if section.name == "app":
-                    outpath = dest / rootfsdir / "mnt" / "app"
-                else:
-                    outpath = dest / rootfsdir
-                self.extract_file_system(section, outpath)
+        for section in self._fs_sections:
+            if section.name == "app":
+                outpath = dest / rootfsdir / "mnt" / "app"
+            else:
+                outpath = dest / rootfsdir
+            self.extract_file_system(section, outpath)
+        mode = "wb" if force else "xb"
+        with open(dest / "uboot", mode) as f:
+            f.write(self.uboot)
 
 
 async def download(url: StrOrURL) -> Union[bytes, int]:

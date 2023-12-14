@@ -13,6 +13,10 @@ class Arch(IntEnum):
     ARM64 = 22
 
 
+class Compression(IntEnum):
+    LZMA = 3
+
+
 class LegacyImageHeader(BigEndianStructure):
     _fields_ = [
         ("_magic", c_uint32),
