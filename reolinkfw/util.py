@@ -12,6 +12,7 @@ from tempfile import gettempdir as _gettempdir
 from typing import Any, AnyStr, BinaryIO, Optional, Union
 from zipfile import is_zipfile
 
+from lz4.block import decompress as lz4_block_decompress
 from pakler import Section, is_pak_file
 from pycramfs.const import MAGIC_BYTES as CRAMFS_MAGIC
 from PySquashfsImage.const import SQUASHFS_MAGIC
@@ -30,6 +31,7 @@ ONEGIB = 1024**3
 
 class FileType(Enum):
     CRAMFS = CRAMFS_MAGIC
+    LZ4_LEGACY_FRAME = b"\x02!L\x18"
     SQUASHFS = SQUASHFS_MAGIC.to_bytes(4, "little")
     UBI = UBI_MAGIC
     UBIFS = UBIFS_MAGIC
@@ -178,3 +180,13 @@ def make_cache_file(url: str, filebytes: Buffer, name: Optional[str] = None) -> 
     except OSError:
         return False
     return True
+
+
+def lz4_legacy_decompress(f: BinaryIO) -> bytes:
+    # https://github.com/python-lz4/python-lz4/issues/169
+    res = b''
+    if f.read(4) != FileType.LZ4_LEGACY_FRAME.value:
+        raise Exception("LZ4 legacy frame magic not found")
+    while (size := int.from_bytes(f.read(4), "little")) != len(res):
+        res += lz4_block_decompress(f.read(size), uncompressed_size=8*ONEMIB)
+    return res

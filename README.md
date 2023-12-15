@@ -81,6 +81,7 @@ Build date:           2020-05-23
 Architecture:         MIPS
 OS:                   Linux
 Kernel image name:    Linux-4.1.0
+Linux banner:         Linux version 4.1.0 (lwy@ubuntu) (gcc version 4.9.3 (Buildroot 2015.11.1-00003-gfd1edb1) ) #1 PREEMPT Tue Feb 26 18:19:48 CST 2019
 U-Boot version:       U-Boot 2014.07 (Feb 26 2019 - 18:20:07)
 U-Boot compiler:      mipsel-24kec-linux-uclibc-gcc.br_real (Buildroot 2015.11.1-00003-gfd1edb1) 4.9.3
 U-Boot linker:        GNU ld (GNU Binutils) 2.24
@@ -108,6 +109,7 @@ $ reolinkfw info RLC-410-5MP_20_20052300.zip -j 2
     "uboot_version": "U-Boot 2014.07 (Feb 26 2019 - 18:20:07)",
     "uboot_compiler": "mipsel-24kec-linux-uclibc-gcc.br_real (Buildroot 2015.11.1-00003-gfd1edb1) 4.9.3",
     "uboot_linker": "GNU ld (GNU Binutils) 2.24",
+    "linux_banner": "Linux version 4.1.0 (lwy@ubuntu) (gcc version 4.9.3 (Buildroot 2015.11.1-00003-gfd1edb1) ) #1 PREEMPT Tue Feb 26 18:19:48 CST 2019",
     "filesystems": [
       {
         "name": "fs",

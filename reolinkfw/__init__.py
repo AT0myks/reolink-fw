@@ -4,6 +4,7 @@ import io
 import lzma
 import posixpath
 import re
+import zlib
 from collections.abc import Iterator, Mapping
 from contextlib import redirect_stdout
 from ctypes import sizeof
@@ -40,6 +41,7 @@ from reolinkfw.util import (
     get_cache_file,
     get_fs_from_ubi,
     has_cache,
+    lz4_legacy_decompress,
     make_cache_file,
 )
 
@@ -53,7 +55,15 @@ KERNEL_SECTIONS = ("kernel", "KERNEL")
 ROOTFS_SECTIONS = ("fs", "rootfs")
 FS_SECTIONS = ROOTFS_SECTIONS + ("app",)
 
+RE_BANNER = re.compile(b"\x00(Linux version .+? \(.+?@.+?\) \(.+?\) .+?)\n\x00")
 RE_COMPLINK = re.compile(b"\x00([^\x00]+?-linux-.+? \(.+?\) [0-9].+?)\n\x00+(.+?)\n\x00")
+RE_KERNEL_COMP = re.compile(
+    b"(?P<lz4>" + FileType.LZ4_LEGACY_FRAME.value + b')'
+    b"|(?P<xz>\xFD\x37\x7A\x58\x5A\x00\x00.(?!XZ))"
+    b"|(?P<lzma>.{5}\xff{8})"
+    b"|(?P<gzip>\x1f\x8b\x08\x00\x00\x00\x00\x00\x02\x03)"
+)
+RE_LZMA_OR_XZ = re.compile(b".{5}\xff{8}|\xFD\x37\x7A\x58\x5A\x00\x00")
 # Pattern for a legacy image header with these properties:
 # OS: U-Boot / firmware (0x11)
 # Type: kernel (0x02)
@@ -70,6 +80,8 @@ class ReolinkFirmware(PAK):
         self._uboot_section = None
         self._uboot = None
         self._kernel_section_name = self._get_kernel_section_name()
+        self._kernel_section = None
+        self._kernel = None
         self._sdict = {s.name: s for s in self}
         self._open_files = 1
         self._fs_sections = [s for s in self if s.name in FS_SECTIONS]
@@ -111,6 +123,22 @@ class ReolinkFirmware(PAK):
         self._uboot = self._decompress_uboot()
         return self._uboot
 
+    @property
+    def kernel_section(self) -> bytes:
+        """Return the firmware's kernel section as bytes."""
+        if self._kernel_section is not None:
+            return self._kernel_section
+        self._kernel_section = self.extract_section(self["kernel"])
+        return self._kernel_section
+
+    @property
+    def kernel(self) -> bytes:
+        """Return the firmware's decompressed kernel as bytes."""
+        if self._kernel is not None:
+            return self._kernel
+        self._kernel = self._decompress_kernel()
+        return self._kernel
+
     def _fdclose(self, fd: BinaryIO) -> None:
         self._open_files -= 1
         if self._closefd and not self._open_files:
@@ -145,6 +173,31 @@ class ReolinkFirmware(PAK):
             raise Exception(f"Unexpected compression {hdr.comp}")
         return uboot  # Assume no compression
 
+    def _decompress_kernel(self) -> bytes:
+        # Use lzma.LZMADecompressor instead of lzma.decompress
+        # because we know there's only one stream.
+        data = self.kernel_section
+        uimage_hdr_size = sizeof(LegacyImageHeader)
+        # RLN36 kernel image headers report no compression
+        # so don't bother reading the header and just look for
+        # a compression magic.
+        if RE_LZMA_OR_XZ.match(data, uimage_hdr_size):
+            return lzma.LZMADecompressor().decompress(data[uimage_hdr_size:])
+        if (halt := data.find(b" -- System halted")) == -1:
+            raise Exception("'System halted' string not found")
+        match = RE_KERNEL_COMP.search(data, halt)
+        if match is None:
+            raise Exception("No known compression found in kernel")
+        start = match.start()
+        if match.lastgroup == "lz4":
+            return lz4_legacy_decompress(io.BytesIO(data[start:]))
+        elif match.lastgroup in ("xz", "lzma"):
+            return lzma.LZMADecompressor().decompress(data[start:])
+        elif match.lastgroup == "gzip":
+            # wbits=31 because only one member to decompress.
+            return zlib.decompress(data[start:], wbits=31)
+        raise Exception("unreachable")
+
     def open(self, section: Section) -> SectionFile:
         self._open_files += 1
         return SectionFile(self._fd, section, self._fdclose)
@@ -171,13 +224,23 @@ class ReolinkFirmware(PAK):
         linker = match_cl.group(2).decode() if match_cl is not None else None
         return version, compiler, linker
 
-    def get_uimage_header(self) -> LegacyImageHeader:
-        for section in self:
-            with self.open(section) as f:
-                if section.len and FileType.from_magic(f.peek(4)) == FileType.UIMAGE:
-                    # This section is always named 'KERNEL' or 'kernel'.
-                    return LegacyImageHeader.from_fd(f)
-        raise Exception("No kernel section found")
+    def get_kernel_image_header(self) -> Optional[LegacyImageHeader]:
+        with self.open(self["kernel"]) as f:
+            data = f.read(sizeof(LegacyImageHeader))
+        if FileType.from_magic(data[:4]) == FileType.UIMAGE:
+            return LegacyImageHeader.from_buffer_copy(data)
+        return None
+
+    def get_kernel_image_header_info(self) -> tuple[Optional[str], Optional[str], Optional[str]]:
+        hdr = self.get_kernel_image_header()
+        if hdr is None:
+            return None, None, None
+        os = "Linux" if hdr.os == 5 else "Unknown"
+        return os, get_arch_name(hdr.arch), hdr.name
+
+    def get_linux_banner(self) -> Optional[str]:
+        match = RE_BANNER.search(self.kernel)
+        return match.group(1).decode() if match is not None else None
 
     def get_fs_info(self) -> list[dict[str, str]]:
         result = []
@@ -206,16 +269,17 @@ class ReolinkFirmware(PAK):
                 files = await asyncio.to_thread(get_files_from_squashfs, f, 0, False)
             else:
                 return {"error": "Unrecognized image type", "sha256": ha}
-        uimage = self.get_uimage_header()
+        os, architecture, kernel_image_name = self.get_kernel_image_header_info()
         uboot_version, compiler, linker = self.get_uboot_info()
         return {
             **get_info_from_files(files),
-            "os": "Linux" if uimage.os == 5 else "Unknown",
-            "architecture": get_arch_name(uimage.arch),
-            "kernel_image_name": uimage.name,
+            "os": os,
+            "architecture": architecture,
+            "kernel_image_name": kernel_image_name,
             "uboot_version": uboot_version,
             "uboot_compiler": compiler,
             "uboot_linker": linker,
+            "linux_banner": self.get_linux_banner(),
             "filesystems": self.get_fs_info(),
             "sha256": ha
         }
@@ -262,6 +326,8 @@ class ReolinkFirmware(PAK):
         mode = "wb" if force else "xb"
         with open(dest / "uboot", mode) as f:
             f.write(self.uboot)
+        with open(dest / "kernel", mode) as f:
+            f.write(self.kernel)
 
 
 async def download(url: StrOrURL) -> Union[bytes, int]:
