@@ -1,4 +1,5 @@
 import asyncio
+import gzip
 import hashlib
 import io
 import lzma
@@ -57,6 +58,7 @@ FS_SECTIONS = ROOTFS_SECTIONS + ("app",)
 
 RE_BANNER = re.compile(b"\x00(Linux version .+? \(.+?@.+?\) \(.+?\) .+?)\n\x00")
 RE_COMPLINK = re.compile(b"\x00([^\x00]+?-linux-.+? \(.+?\) [0-9].+?)\n\x00+(.+?)\n\x00")
+RE_IKCFG = re.compile(b"IKCFG_ST(.+?)IKCFG_ED", re.DOTALL)
 RE_KERNEL_COMP = re.compile(
     b"(?P<lz4>" + FileType.LZ4_LEGACY_FRAME.value + b')'
     b"|(?P<xz>\xFD\x37\x7A\x58\x5A\x00\x00.(?!XZ))"
@@ -242,6 +244,11 @@ class ReolinkFirmware(PAK):
         match = RE_BANNER.search(self.kernel)
         return match.group(1).decode() if match is not None else None
 
+    def get_kernel_config(self) -> Optional[bytes]:
+        if (match := RE_IKCFG.search(self.kernel)) is not None:
+            return gzip.decompress(match.group(1))
+        return None
+
     def get_fs_info(self) -> list[dict[str, str]]:
         result = []
         for section in self._fs_sections:
@@ -328,6 +335,9 @@ class ReolinkFirmware(PAK):
             f.write(self.uboot)
         with open(dest / "kernel", mode) as f:
             f.write(self.kernel)
+        if (kcfg := self.get_kernel_config()) is not None:
+            with open(dest / ".config", mode) as f:
+                f.write(kcfg)
 
 
 async def download(url: StrOrURL) -> Union[bytes, int]:
