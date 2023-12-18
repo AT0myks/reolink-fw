@@ -38,6 +38,8 @@ async def info(args: Namespace) -> None:
             print(f"{'U-Boot linker:':{width}}", info.uboot_linker or "Unknown")
             print(f"{'File system:':{width}}", ', '.join(sorted(fs_types)))
             print(f"{'File system sections:':{width}}", ', '.join(fs_names))
+            print(f"{'Board vendor:':{width}}", info.board_vendor or "Unknown")
+            print(f"{'Board:':{width}}", info.board or "Unknown")
             if idx != len(pak_infos) - 1:
                 print()
     else:

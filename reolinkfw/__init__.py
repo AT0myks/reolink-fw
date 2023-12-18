@@ -160,6 +160,12 @@ class ReolinkFirmware(PAK):
             return literal_eval(self.fdt.to_json().replace("null", "None"))
         return None
 
+    @property
+    def board(self) -> Optional[str]:
+        if self.fdt_json is not None:
+            return self.fdt_json["model"][1]
+        return None
+
     def _fdclose(self, fd: BinaryIO) -> None:
         self._open_files -= 1
         if self._closefd and not self._open_files:
@@ -294,6 +300,22 @@ class ReolinkFirmware(PAK):
             return gzip.decompress(match.group(1))
         return None
 
+    def get_vendor(self) -> Optional[str]:
+        map_ = {
+            "novatek": "Novatek",
+            "sstar": "MStar/SigmaStar",
+            "hisilicon": "HiSilicon",
+        }
+        if self.fdt_json is not None:
+            key = self.fdt_json["compatible"][1].split(',')[0]
+            return map_.get(key.lower(), key)
+        with self.open(self["uboot"]) as f:
+            if re.match(b"GM[0-9]{4}", f.read(6)):
+                return "Grain Media"
+        if re.search(b"HISILICON LOGO MAGIC", self.uboot_section) is not None:
+            return "HiSilicon"
+        return None
+
     def get_fs_info(self) -> list[dict[str, str]]:
         result = []
         for section in self._fs_sections:
@@ -332,6 +354,8 @@ class ReolinkFirmware(PAK):
             "uboot_compiler": compiler,
             "uboot_linker": linker,
             "linux_banner": self.get_linux_banner(),
+            "board": self.board or "Unknown",
+            "board_vendor": self.get_vendor() or "Unknown",
             "filesystems": self.get_fs_info(),
             "sha256": ha
         }
