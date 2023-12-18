@@ -251,7 +251,9 @@ class ReolinkFirmware(PAK):
             return FdtBlobParse(io.BytesIO(data[start:end])).to_fdt()
         return None
 
-    def open(self, section: Section) -> SectionFile:
+    def open(self, section: Union[Section, str]) -> SectionFile:
+        if isinstance(section, str):
+            section = self[section]
         self._open_files += 1
         return SectionFile(self._fd, section, self._fdclose)
 
@@ -278,7 +280,7 @@ class ReolinkFirmware(PAK):
         return version, compiler, linker
 
     def get_kernel_image_header(self) -> Optional[LegacyImageHeader]:
-        with self.open(self["kernel"]) as f:
+        with self.open("kernel") as f:
             data = f.read(sizeof(LegacyImageHeader))
         if FileType.from_magic(data[:4]) == FileType.UIMAGE:
             return LegacyImageHeader.from_buffer_copy(data)
@@ -309,7 +311,7 @@ class ReolinkFirmware(PAK):
         if self.fdt_json is not None:
             key = self.fdt_json["compatible"][1].split(',')[0]
             return map_.get(key.lower(), key)
-        with self.open(self["uboot"]) as f:
+        with self.open("uboot") as f:
             if re.match(b"GM[0-9]{4}", f.read(6)):
                 return "Grain Media"
         if re.search(b"HISILICON LOGO MAGIC", self.uboot_section) is not None:
