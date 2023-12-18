@@ -6,6 +6,7 @@ import lzma
 import posixpath
 import re
 import zlib
+from ast import literal_eval
 from collections.abc import Iterator, Mapping
 from contextlib import redirect_stdout
 from ctypes import sizeof
@@ -23,6 +24,7 @@ from lxml.html import document_fromstring
 from pakler import PAK, Section, is_pak_file
 from pycramfs import Cramfs
 from pycramfs.extract import extract_dir as extract_cramfs
+from pyfdt.pyfdt import Fdt, FdtBlobParse
 from PySquashfsImage import SquashFsImage
 from PySquashfsImage.extract import extract_dir as extract_squashfs
 from ubireader.ubifs import ubifs as ubifs_
@@ -30,6 +32,7 @@ from ubireader.ubifs.output import extract_files as extract_ubifs
 from ubireader.ubi_io import ubi_file
 from ubireader.utils import guess_leb_size
 
+from reolinkfw.fdt import RE_FDT_HEADER, FDTHeader
 from reolinkfw.tmpfile import TempFile
 from reolinkfw.typedefs import Buffer, Files, StrPath, StrPathURL
 from reolinkfw.ubifs import UBIFS
@@ -73,6 +76,8 @@ RE_LZMA_OR_XZ = re.compile(b".{5}\xff{8}|\xFD\x37\x7A\x58\x5A\x00\x00")
 RE_MSTAR = re.compile(FileType.UIMAGE.value + b".{24}\x11.\x02.{33}", re.DOTALL)
 RE_UBOOT = re.compile(b"U-Boot [0-9]{4}\.[0-9]{2}.*? \(.+?\)")
 
+DUMMY = object()
+
 
 class ReolinkFirmware(PAK):
 
@@ -84,6 +89,7 @@ class ReolinkFirmware(PAK):
         self._kernel_section_name = self._get_kernel_section_name()
         self._kernel_section = None
         self._kernel = None
+        self._fdt = DUMMY
         self._sdict = {s.name: s for s in self}
         self._open_files = 1
         self._fs_sections = [s for s in self if s.name in FS_SECTIONS]
@@ -140,6 +146,19 @@ class ReolinkFirmware(PAK):
             return self._kernel
         self._kernel = self._decompress_kernel()
         return self._kernel
+
+    @property
+    def fdt(self) -> Optional[Fdt]:
+        if self._fdt is not DUMMY:
+            return self._fdt  # type: ignore
+        self._fdt = self._get_fdt()
+        return self._fdt
+
+    @property
+    def fdt_json(self) -> Optional[dict[str, Any]]:
+        if self.fdt is not None:
+            return literal_eval(self.fdt.to_json().replace("null", "None"))
+        return None
 
     def _fdclose(self, fd: BinaryIO) -> None:
         self._open_files -= 1
@@ -199,6 +218,32 @@ class ReolinkFirmware(PAK):
             # wbits=31 because only one member to decompress.
             return zlib.decompress(data[start:], wbits=31)
         raise Exception("unreachable")
+
+    def _get_fdt(self) -> Optional[Fdt]:
+        # At most 2 FDTs can be found in a firmware, and usually only one.
+        # Most of the time it's in the fdt section or in the decompressed kernel.
+        # Hardware versions starting with IPC_30 or IPC_32 have 1 FDT
+        # in the decompressed kernel.
+        # Hardware versions starting with IPC_35, IPC_36 or IPC_38 have no FDT.
+        # HI3536CV100 -> only firmwares with FDT in kernel_section
+        # Some firmwares with one FDT in the fdt section have a 2nd FDT
+        # in the U-Boot section with no model.
+        match = data = None
+        if "fdt" in self._sdict:
+            # Reolink Duo 1: 2 FDTs, section starts with header FKLR (Reolink FDT?)
+            # Some NVRs: 2 FDTs
+            data = self.extract_section(self["fdt"])
+            match = RE_FDT_HEADER.search(data)
+        elif (match := RE_FDT_HEADER.search(self.kernel_section)) is not None:
+            data = self.kernel_section
+        elif (match := RE_FDT_HEADER.search(self.kernel)) is not None:
+            data = self.kernel
+        if match is not None and data is not None:
+            start = match.start()
+            hdr = FDTHeader.from_buffer_copy(data, start)
+            end = start + hdr.totalsize
+            return FdtBlobParse(io.BytesIO(data[start:end])).to_fdt()
+        return None
 
     def open(self, section: Section) -> SectionFile:
         self._open_files += 1
@@ -338,6 +383,9 @@ class ReolinkFirmware(PAK):
         if (kcfg := self.get_kernel_config()) is not None:
             with open(dest / ".config", mode) as f:
                 f.write(kcfg)
+        if self.fdt is not None:
+            with open(dest / "camera.dts", 'w' if force else 'x', encoding="utf8") as f:
+                f.write(self.fdt.to_dts())
 
 
 async def download(url: StrOrURL) -> Union[bytes, int]:
