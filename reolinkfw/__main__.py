@@ -17,6 +17,8 @@ async def info(args: Namespace) -> None:
     if args.json is None:
         width = 21
         for idx, info in enumerate(pak_infos):
+            if "error" in info:
+                raise Exception(info["error"])
             info = Namespace(**info)
             fs_types = set(fs["type"] for fs in info.filesystems)
             fs_names = [fs["name"] for fs in info.filesystems]
