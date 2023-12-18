@@ -66,13 +66,13 @@ def main() -> None:
     pcache = ArgumentParser(add_help=False)
     pcache.add_argument("--no-cache", action="store_true", help="don't use cache for remote files (URLs)")
 
-    parser_i = subparsers.add_parser("info", parents=[pcache])
+    parser_i = subparsers.add_parser("info", parents=[pcache], aliases=['i'])
     parser_i.add_argument("file_or_url", help="URL or on-disk file")
     parser_i.add_argument("-j", "--json", nargs='?', type=int, const=-1, metavar="indent", help="JSON output with optional indentation level for pretty print")
     parser_i.set_defaults(func=info)
 
     descex = "Extract the file system from a Reolink firmware"
-    parser_e = subparsers.add_parser("extract", parents=[pcache], help=descex.lower(), description=descex)
+    parser_e = subparsers.add_parser("extract", parents=[pcache], aliases=['e'], help=descex.lower(), description=descex)
     parser_e.add_argument("file_or_url", help="URL or on-disk file")
     parser_e.add_argument("-d", "--dest", type=Path, help="destination directory. Default: current directory")
     parser_e.add_argument("-f", "--force", action="store_true", help="overwrite existing files. Does not apply to UBIFS. Default: %(default)s")
