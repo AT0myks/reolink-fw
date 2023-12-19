@@ -356,8 +356,8 @@ class ReolinkFirmware(PAK):
             "uboot_compiler": compiler,
             "uboot_linker": linker,
             "linux_banner": self.get_linux_banner(),
-            "board": self.board or "Unknown",
-            "board_vendor": self.get_vendor() or "Unknown",
+            "board": self.board,
+            "board_vendor": self.get_vendor(),
             "filesystems": self.get_fs_info(),
             "sha256": ha
         }
