@@ -7,7 +7,7 @@ import posixpath
 import re
 import zlib
 from ast import literal_eval
-from collections.abc import Iterator, Mapping
+from collections.abc import Iterator
 from contextlib import redirect_stdout
 from ctypes import sizeof
 from functools import partial
@@ -34,7 +34,7 @@ from ubireader.utils import guess_leb_size
 
 from reolinkfw.fdt import RE_FDT_HEADER, FDTHeader
 from reolinkfw.tmpfile import TempFile
-from reolinkfw.typedefs import Buffer, Files, StrPath, StrPathURL
+from reolinkfw.typedefs import Buffer, DVRInfo, InfoFiles, StrPath, StrPathURL
 from reolinkfw.ubifs import UBIFS
 from reolinkfw.uboot import Compression, LegacyImageHeader, get_arch_name
 from reolinkfw.util import (
@@ -440,7 +440,7 @@ def firmwares_from_zip(zip: Union[StrPath, IO[bytes]]) -> list[tuple[str, Reolin
     return fws
 
 
-def get_info_from_files(files: Mapping[Files, Optional[bytes]]) -> dict[str, Optional[str]]:
+def get_info_from_files(files: InfoFiles) -> DVRInfo:
     xml: dict[str, str] = dict(fromstring(files["dvr.xml"]).items())
     info = {k: xml.get(k) for k in INFO_KEYS}
     info["version_file"] = files["version_file"].decode().strip()
@@ -448,10 +448,10 @@ def get_info_from_files(files: Mapping[Files, Optional[bytes]]) -> dict[str, Opt
         thefile = files["dvr"] if files["dvr"] is not None else files["router"]
         match = re.search(b"echo (v[23]\.0\.0)", thefile) if thefile is not None else None
         info["firmware_version_prefix"] = match.group(1).decode() if match else None
-    return info
+    return info  # type: ignore
 
 
-def get_files_from_squashfs(fd: BinaryIO, offset: int = 0, closefd: bool = True) -> dict[Files, Optional[bytes]]:
+def get_files_from_squashfs(fd: BinaryIO, offset: int = 0, closefd: bool = True) -> InfoFiles:
     # Firmwares using squashfs have either one or two file system
     # sections. When there is only one, the app directory is located at
     # /mnt/app. Otherwise it's the same as with cramfs and ubifs.
@@ -461,10 +461,10 @@ def get_files_from_squashfs(fd: BinaryIO, offset: int = 0, closefd: bool = True)
             path2 = posixpath.join("/mnt/app", name)
             if (file := (image.select(name) or image.select(path2))) is not None:
                 files[name] = file.read_bytes()
-    return files
+    return files  # type: ignore
 
 
-def get_files_from_ubifs(binbytes: Buffer) -> dict[Files, Optional[bytes]]:
+def get_files_from_ubifs(binbytes: Buffer) -> InfoFiles:
     # For now all firmwares using ubifs have two file system sections.
     # The interesting files are in the root directory of the "app" one.
     # Using select() with a relative path is enough.
@@ -474,10 +474,10 @@ def get_files_from_ubifs(binbytes: Buffer) -> dict[Files, Optional[bytes]]:
             for name in files:
                 if (file := image.select(name)) is not None:
                     files[name] = file.read_bytes()
-    return files
+    return files  # type: ignore
 
 
-def get_files_from_ubi(fd: BinaryIO, size: int, offset: int = 0) -> dict[Files, Optional[bytes]]:
+def get_files_from_ubi(fd: BinaryIO, size: int, offset: int = 0) -> InfoFiles:
     fsbytes = get_fs_from_ubi(fd, size, offset)
     fs = FileType.from_magic(fsbytes[:4])
     if fs == FileType.UBIFS:
@@ -487,7 +487,7 @@ def get_files_from_ubi(fd: BinaryIO, size: int, offset: int = 0) -> dict[Files, 
     raise Exception("Unknown file system in UBI")
 
 
-def get_files_from_cramfs(fd: BinaryIO, offset: int = 0, closefd: bool = True) -> dict[Files, Optional[bytes]]:
+def get_files_from_cramfs(fd: BinaryIO, offset: int = 0, closefd: bool = True) -> InfoFiles:
     # For now all firmwares using cramfs have two file system sections.
     # The interesting files are in the root directory of the "app" one.
     # Using select() with a relative path is enough.
@@ -496,7 +496,7 @@ def get_files_from_cramfs(fd: BinaryIO, offset: int = 0, closefd: bool = True) -
         for name in files:
             if (file := cramfs.select(name)) is not None:
                 files[name] = file.read_bytes()
-    return files
+    return files  # type: ignore
 
 
 def is_url(string: StrOrURL) -> bool:
