@@ -73,7 +73,7 @@ def main() -> None:
     parser_i.add_argument("-j", "--json", nargs='?', type=int, const=-1, metavar="indent", help="JSON output with optional indentation level for pretty print")
     parser_i.set_defaults(func=info)
 
-    descex = "Extract the file system from a Reolink firmware"
+    descex = "Extract the file system and a few other files from a Reolink firmware"
     parser_e = subparsers.add_parser("extract", parents=[pcache], aliases=['e'], help=descex.lower(), description=descex)
     parser_e.add_argument("file_or_url", help="URL or on-disk file")
     parser_e.add_argument("-d", "--dest", type=Path, help="destination directory. Default: current directory")

@@ -7,48 +7,59 @@
 <a href="https://github.com/AT0myks/reolink-fw/blob/main/LICENSE"><img alt="License" src="https://img.shields.io/pypi/l/reolinkfw"></a>
 </p>
 
-* [What is it](#what-is-it)
+* [Description](#description)
 * [Requirements](#requirements)
 * [Installation](#installation)
 * [Usage](#usage)
 * [Notes](#notes)
 * [Issues](#issues)
 
-## What is it
+## Description
 
-This is a small tool to get information on Reolink firmwares.
-It's able to read ZIP and PAK files, either local or at the end of a URL.
-The info is read from the files contained in the firmware (mainly `dvr.xml`) and
-if we trust them to be 100% correct, it allows to know precisely which
-model/hardware version a given firmware is targeting.
+This is a tool and library to read and extract Reolink firmwares.
+It supports ZIP and PAK files, local or remote.
+Information is retrieved directly from the files contained inside a firmware.
 
-It was first developed as part of
-[another Reolink-related project](https://github.com/AT0myks/reolink-fw-archive)
-but became its own thing.
+It can extract:
+- File systems
+- Decompressed U-Boot
+- Decompressed kernel
+- Kernel config (some firmwares)
+- Devicetree source (some firmwares)
 
-Currently it doesn't do anything more and is probably not that useful outside of
-this other project.
+This is what powers the
+[firmware archive](https://github.com/AT0myks/reolink-fw-archive)
+where you can also find
+[details](https://github.com/AT0myks/reolink-fw-archive/blob/main/pak_info.json)
+about all of the firmwares it lists without having to install the tool yourself.
 
 ## Requirements
 
 - Python 3.9+
-- [python-lzo](https://github.com/jd-boyd/python-lzo) (manual steps not required on Windows, see below)
+- [python-lzo](https://github.com/jd-boyd/python-lzo)
 
 ## Installation
 
-On Linux and macOS, install
-[python-lzo](https://github.com/jd-boyd/python-lzo#installation) first. Then
-
 ```
+pip install -i https://test.pypi.org/simple/ python-lzo
 pip install reolinkfw
 ```
 
-lxml doesn't have a wheel for Python 3.11 on macOS, you might want to look
-[here](https://lxml.de/installation.html).
-
 python-lzo doesn't have wheels for Linux and for Python 3.9+ on macOS.
-A [PR](https://github.com/jd-boyd/python-lzo/pull/75) is open to have them be
-provided on PyPI.
+A [PR](https://github.com/jd-boyd/python-lzo/pull/75) has been merged to provide
+wheels for all version on all platforms but there needs to be a new release first.
+In the meantime you can install wheels from
+[TestPyPI](https://test.pypi.org/project/python-lzo/) as shown above.
+
+> [!IMPORTANT]  
+> No Python 3.12 wheels exist yet for python-lzo and lz4.
+> To build python-lzo from source see
+> [here](https://github.com/jd-boyd/python-lzo/blob/dc6a0f365267c4db99caf941e1beeb9fdfe0fe8c/README.md#installation)
+> (Linux and macOS) and
+> [here](https://github.com/jd-boyd/python-lzo?tab=readme-ov-file#building-from-source)
+> (Windows), and
+> [here](https://python-lz4.readthedocs.io/en/stable/install.html#installing-from-source)
+> for lz4.
 
 ## Usage
 
@@ -62,7 +73,7 @@ usage: reolinkfw info [-h] [--no-cache] [-j [indent]] file_or_url
 positional arguments:
   file_or_url                   URL or on-disk file
 
-optional arguments:
+options:
   -h, --help                    show this help message and exit
   --no-cache                    don't use cache for remote files (URLs)
   -j [indent], --json [indent]  JSON output with optional indentation level for pretty print
@@ -138,12 +149,12 @@ the file name.
 ```
 usage: reolinkfw extract [-h] [--no-cache] [-d DEST] [-f] file_or_url
 
-Extract the file system from a Reolink firmware
+Extract the file system and a few other files from a Reolink firmware
 
 positional arguments:
   file_or_url           URL or on-disk file
 
-optional arguments:
+options:
   -h, --help            show this help message and exit
   --no-cache            don't use cache for remote files (URLs)
   -d DEST, --dest DEST  destination directory. Default: current directory
@@ -168,9 +179,9 @@ from reolinkfw import ReolinkFirmware, get_info
 
 url = "https://reolink-storage.s3.amazonaws.com/website/firmware/20200523firmware/RLC-410-5MP_20_20052300.zip"
 print(get_info(url))
-file = "/home/ben/RLC-410-5MP_20_20052300.zip"
-print(get_info(file))
-with ReolinkFirmware.from_file(file) as fw:
+pak = "/home/ben/RLC-410-5MP_20_20052300.pak"
+with ReolinkFirmware.from_file(pak) as fw:
+    print(fw.get_info())
     fw.extract()
 ```
 
@@ -181,7 +192,7 @@ But in some cases (for example beta firmwares) Reolink gives a Google Drive or
 a bit.ly link (that redirects to a Google Drive link).
 
 These URLs are automatically handled so that you don't have to figure out the
-"real" download link, and in this case the `url` value(s) in the result JSON
+"real" download link, and in this case the `file` value(s) in the result JSON
 will not be the link that you gave but the direct download one.
 
 However the Google Drive folder links (`drive.google.com/drive/folders`) are not
@@ -197,3 +208,18 @@ There are 3 types of file systems used for Reolink firmwares:
 
 Some ZIP files provided by Reolink contain multiple PAKs. This is why `get_info`
 always returns a list.
+
+Here's a map of vendors to hardware versions:
+
+Cameras:
+- MStar/SigmaStar: IPC_30, IPC_32, IPC_MS
+- Grain Media: IPC_35, IPC_36, IPC_38
+- Novatek: DB_56, FE_52, IPC_51, IPC_52, IPC_56, IPC_NT
+
+NVRs:
+- Novatek: hardware version is H3MB18 or starts with N
+- HiSilicon: hardware version starts with H (except H3MB18)
+
+Grain Media was
+[transferred](https://web.archive.org/web/20170703025339/https://www.grain-media.com/)
+to Novatek around 2017.
