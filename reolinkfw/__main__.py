@@ -63,7 +63,7 @@ async def extract(args: Namespace) -> None:
 def main() -> None:
     parser = ArgumentParser(description="Extract information and files from Reolink firmwares")
     parser.add_argument("-V", "--version", action="version", version=f"%(prog)s {__version__}")
-    subparsers = parser.add_subparsers(required=True)
+    subparsers = parser.add_subparsers(dest="command", required=True)
 
     pcache = ArgumentParser(add_help=False)
     pcache.add_argument("--no-cache", action="store_true", help="don't use cache for remote files (URLs)")
