@@ -558,7 +558,7 @@ async def firmwares_from_file(file_or_url: StrPathURL, use_cache: bool = True) -
     raise Exception("Not a URL or file")
 
 
-async def get_info(file_or_url: StrPathURL, use_cache: bool = True) -> list[dict[str, Any]]:
+async def firmware_info(file_or_url: StrPathURL, use_cache: bool = True) -> list[dict[str, Any]]:
     """Retrieve firmware info from an on-disk file or a URL.
 
     The file or resource may be a ZIP or a PAK.

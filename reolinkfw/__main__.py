@@ -7,13 +7,13 @@ from argparse import ArgumentParser, Namespace
 from datetime import datetime
 from pathlib import Path, PurePath
 
-from reolinkfw import __version__, firmwares_from_file, get_info
+from reolinkfw import __version__, firmware_info, firmwares_from_file
 
 HW_FIELDS = ("board_type", "detail_machine_type", "board_name")
 
 
 async def info(args: Namespace) -> None:
-    pak_infos = await get_info(args.file_or_url, not args.no_cache)
+    pak_infos = await firmware_info(args.file_or_url, not args.no_cache)
     if args.json is None:
         width = 21
         for idx, info in enumerate(pak_infos):
@@ -55,9 +55,9 @@ async def extract(args: Namespace) -> None:
         raise Exception("No PAKs found in ZIP file")
     dest = Path.cwd() if args.dest is None else args.dest
     for pakname, fw in fws:
-        name = fw.sha256() if pakname is None else PurePath(pakname).stem
-        await asyncio.to_thread(fw.extract, dest / name, args.force)
-        fw.close()
+        with fw:
+            name = fw.sha256() if pakname is None else PurePath(pakname).stem
+            await asyncio.to_thread(fw.extract, dest / name, args.force)
 
 
 def main() -> None:

@@ -176,11 +176,11 @@ You should not use it to repack a custom firmware.
 
 ```py
 import asyncio
-from reolinkfw import ReolinkFirmware, get_info
+from reolinkfw import ReolinkFirmware, firmware_info
 
 async def main():
     url = "https://reolink-storage.s3.amazonaws.com/website/firmware/20200523firmware/RLC-410-5MP_20_20052300.zip"
-    print(await get_info(url))
+    print(await firmware_info(url))
     pak = "/home/ben/RLC-410-5MP_20_20052300.pak"
     with ReolinkFirmware.from_file(pak) as fw:
         print(await fw.get_info())
@@ -210,7 +210,7 @@ There are 3 types of file systems used for Reolink firmwares:
 - [squashfs](https://www.kernel.org/doc/html/latest/filesystems/squashfs.html) (handled by [PySquashfsImage](https://github.com/matteomattei/PySquashfsImage))
 - [UBIFS](https://www.kernel.org/doc/html/latest/filesystems/ubifs.html) (handled by [ubi_reader](https://github.com/jrspruitt/ubi_reader))
 
-Some ZIP files provided by Reolink contain multiple PAKs. This is why `get_info`
+Some ZIP files provided by Reolink contain multiple PAKs. This is why `firmware_info`
 always returns a list.
 
 Here's a map of vendors to hardware versions:
