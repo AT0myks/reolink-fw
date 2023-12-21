@@ -18,7 +18,6 @@ FileDescriptorOrPath = Union[int, StrOrBytesPath]
 InfoFiles = TypedDict("InfoFiles", {
     "version_file": bytes,
     "dvr.xml": bytes,
-    "version.json": Optional[bytes],
     "dvr": Optional[bytes],
     "router": Optional[bytes],
 })

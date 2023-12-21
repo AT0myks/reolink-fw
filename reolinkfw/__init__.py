@@ -51,7 +51,7 @@ from reolinkfw.util import (
 
 __version__ = "1.1.0"
 
-FILES = ("version_file", "version.json", "dvr.xml", "dvr", "router")
+FILES = ("version_file", "dvr.xml", "dvr", "router")
 INFO_KEYS = ("firmware_version_prefix", "board_type", "board_name", "build_date", "display_type_info", "detail_machine_type", "type")
 
 UBOOT_SECTIONS = ("uboot", "uboot1", "BOOT")
