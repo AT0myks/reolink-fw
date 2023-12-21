@@ -59,8 +59,8 @@ KERNEL_SECTIONS = ("kernel", "KERNEL")
 ROOTFS_SECTIONS = ("fs", "rootfs")
 FS_SECTIONS = ROOTFS_SECTIONS + ("app",)
 
-RE_BANNER = re.compile(b"\x00(Linux version .+? \(.+?@.+?\) \(.+?\) .+?)\n\x00")
-RE_COMPLINK = re.compile(b"\x00([^\x00]+?-linux-.+? \(.+?\) [0-9].+?)\n\x00+(.+?)\n\x00")
+RE_BANNER = re.compile(rb"\x00(Linux version .+? \(.+?@.+?\) \(.+?\) .+?)\n\x00")
+RE_COMPLINK = re.compile(rb"\x00([^\x00]+?-linux-.+? \(.+?\) [0-9].+?)\n\x00+(.+?)\n\x00")
 RE_IKCFG = re.compile(b"IKCFG_ST(.+?)IKCFG_ED", re.DOTALL)
 RE_KERNEL_COMP = re.compile(
     b"(?P<lz4>" + FileType.LZ4_LEGACY_FRAME.value + b')'
@@ -74,7 +74,7 @@ RE_LZMA_OR_XZ = re.compile(b".{5}\xff{8}|\xFD\x37\x7A\x58\x5A\x00\x00")
 # Type: kernel (0x02)
 # Only used for MStar/SigmaStar cameras (Lumus and RLC-410W IPC_30K128M4MP)
 RE_MSTAR = re.compile(FileType.UIMAGE.value + b".{24}\x11.\x02.{33}", re.DOTALL)
-RE_UBOOT = re.compile(b"U-Boot [0-9]{4}\.[0-9]{2}.*? \(.+?\)")
+RE_UBOOT = re.compile(rb"U-Boot [0-9]{4}\.[0-9]{2}.*? \(.+?\)")
 
 DUMMY = object()
 
@@ -446,7 +446,7 @@ def get_info_from_files(files: InfoFiles) -> DVRInfo:
     info["version_file"] = files["version_file"].decode().strip()
     if not info.get("firmware_version_prefix"):
         thefile = files["dvr"] if files["dvr"] is not None else files["router"]
-        match = re.search(b"echo (v[23]\.0\.0)", thefile) if thefile is not None else None
+        match = re.search(rb"echo (v[23]\.0\.0)", thefile) if thefile is not None else None
         info["firmware_version_prefix"] = match.group(1).decode() if match else None
     return info  # type: ignore
 
