@@ -175,14 +175,18 @@ You should not use it to repack a custom firmware.
 ### As a library
 
 ```py
+import asyncio
 from reolinkfw import ReolinkFirmware, get_info
 
-url = "https://reolink-storage.s3.amazonaws.com/website/firmware/20200523firmware/RLC-410-5MP_20_20052300.zip"
-print(get_info(url))
-pak = "/home/ben/RLC-410-5MP_20_20052300.pak"
-with ReolinkFirmware.from_file(pak) as fw:
-    print(fw.get_info())
-    fw.extract()
+async def main():
+    url = "https://reolink-storage.s3.amazonaws.com/website/firmware/20200523firmware/RLC-410-5MP_20_20052300.zip"
+    print(await get_info(url))
+    pak = "/home/ben/RLC-410-5MP_20_20052300.pak"
+    with ReolinkFirmware.from_file(pak) as fw:
+        print(await fw.get_info())
+        fw.extract()
+
+asyncio.run(main())
 ```
 
 In most cases where a URL is used, it will be a direct link to the file
