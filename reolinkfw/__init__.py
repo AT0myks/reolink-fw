@@ -49,7 +49,7 @@ from reolinkfw.util import (
     make_cache_file,
 )
 
-__version__ = "1.1.0"
+__version__ = "2.0.0"
 
 FILES = ("version_file", "dvr.xml", "dvr", "router")
 INFO_KEYS = ("firmware_version_prefix", "board_type", "board_name", "build_date", "display_type_info", "detail_machine_type", "type")
