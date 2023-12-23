@@ -12,7 +12,6 @@
 * [Installation](#installation)
 * [Usage](#usage)
 * [Notes](#notes)
-* [Issues](#issues)
 
 ## Description
 
@@ -45,21 +44,15 @@ pip install -i https://test.pypi.org/simple/ python-lzo
 pip install reolinkfw
 ```
 
-python-lzo doesn't have wheels for Linux and for Python 3.9+ on macOS.
+python-lzo doesn't have wheels on PyPI for Linux and for Python 3.9+ on macOS yet.
 A [PR](https://github.com/jd-boyd/python-lzo/pull/75) has been merged to provide
 wheels for all version on all platforms but there needs to be a new release first.
 In the meantime you can install wheels from
 [TestPyPI](https://test.pypi.org/project/python-lzo/) as shown above.
 
 > [!IMPORTANT]  
-> No Python 3.12 wheels exist yet for python-lzo and lz4.
-> To build python-lzo from source see
-> [here](https://github.com/jd-boyd/python-lzo/blob/dc6a0f365267c4db99caf941e1beeb9fdfe0fe8c/README.md#installation)
-> (Linux and macOS) and
-> [here](https://github.com/jd-boyd/python-lzo?tab=readme-ov-file#building-from-source)
-> (Windows), and
-> [here](https://python-lz4.readthedocs.io/en/stable/install.html#installing-from-source)
-> for lz4.
+> No Python 3.12 wheels exist yet for lz4. To build it from source see
+> [here](https://python-lz4.readthedocs.io/en/stable/install.html#installing-from-source).
 
 ## Usage
 
@@ -210,8 +203,8 @@ There are 3 types of file systems used for Reolink firmwares:
 - [squashfs](https://www.kernel.org/doc/html/latest/filesystems/squashfs.html) (handled by [PySquashfsImage](https://github.com/matteomattei/PySquashfsImage))
 - [UBIFS](https://www.kernel.org/doc/html/latest/filesystems/ubifs.html) (handled by [ubi_reader](https://github.com/jrspruitt/ubi_reader))
 
-Some ZIP files provided by Reolink contain multiple PAKs. This is why `firmware_info`
-always returns a list.
+Some ZIP files provided by Reolink contain multiple PAKs. This is why
+`firmware_info` always returns a list.
 
 Here's a map of vendors to hardware versions:
 
