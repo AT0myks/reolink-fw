@@ -141,10 +141,16 @@ class ReolinkFirmware(PAK):
 
     @property
     def kernel(self) -> bytes:
-        """Return the firmware's decompressed kernel as bytes."""
+        """Return the firmware's decompressed kernel as bytes.
+
+        If the kernel cannot be decompressed, return an empty bytes object.
+        """
         if self._kernel is not None:
             return self._kernel
-        self._kernel = self._decompress_kernel()
+        try:
+            self._kernel = self._decompress_kernel()
+        except Exception:
+            self._kernel = b''
         return self._kernel
 
     @property
